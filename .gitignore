@@ -1,7 +1,14 @@
-*.zip
 Costs/**
-*.o
-test
 .vscode/**
+jobs/**
+
+test
+
+*.zip
+*.o
+
 .DS_Store
 *.txt
+
+batch_run.sh
+jobscript100.sh
