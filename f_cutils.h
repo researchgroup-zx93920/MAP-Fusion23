@@ -1,9 +1,4 @@
-/*
- * f_cutils.cpp
- *
- *  Created on: Jul 11, 2015
- *      Author: date2
- */
+#pragma once
 
 #include <iostream>
 #include <fstream>
@@ -14,9 +9,10 @@
 #include "d_vars.h"
 #include <sstream>
 #include <random>
-#include <time.h>
-#include <omp.h>
-#include <thread>
+#include "timer.h"
+#include <math.h>
+
+// using namespace std;
 
 #ifndef F_CUTILS_H_
 #define F_CUTILS_H_
@@ -74,7 +70,7 @@ void readFile(double *cost_matrix, const char *filename);
 void readFiley(double *cost_matrix, const char *filename);
 void createProbGenData(int *cycle, unsigned long seed);
 void gen_costs(double *cost_matrix, double *y_costs, int *cycle, unsigned long seed, int SP_x, int SP_y, std::size_t N, std::size_t K);
-void gen_costs_mod(double *cost_matrix, double *y_costs, int *cycle, unsigned long seed, int SP_x, int SP_y, std::size_t N, std::size_t K);
+// void gen_costs_mod(double *cost_matrix, double *y_costs, int *cycle, unsigned long seed, int SP_x, int SP_y, std::size_t N, std::size_t K);
 
 void printToFile2(double LB, double UB, int N, int K, int procsize, int numdev, double time);
 // double getUB_all_batches(double *h_x_costs, double *h_y_costs, int *h_row_assignments, int N);

@@ -16,10 +16,11 @@
 #include "Functions.h"
 #include <thrust/set_operations.h>
 #include <random>
-#include <time.h>
+#include "timer.h"
 #include <cstddef>
+#include "utils.h"
 
-int rank, procsize;
+int ranks = 0, procsize = 1;
 
 int devcount = 0;
 std::size_t n = 0;
@@ -81,11 +82,7 @@ double getUB_all_batches(double *h_x_costs, double *h_y_costs, int *h_row_assign
 
 int main(int argc, char **argv)
 {
-  MPI_Init(&argc, &argv);
-  MPI_Comm_size(MPI_COMM_WORLD, &procsize);
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  // std::cout << "procsize: " << procsize << " rank: " << rank << std::endl;
-  // cudaSetDevice(3);
+  // std::cout << "procsize: " << procsize << " ranks: " << ranks << std::endl;
 
   n = atoi(argv[1]);
   K = atoi(argv[2]);
@@ -112,15 +109,15 @@ int main(int argc, char **argv)
 
   initialize();
   std::cout << "fin" << std::endl;
-  int subproblems_proc = proc_sub_prob_count[rank];
-  int subproblems_y_proc = proc_y_sub_prob_count[rank];
+  int subproblems_proc = proc_sub_prob_count[ranks];
+  int subproblems_y_proc = proc_y_sub_prob_count[ranks];
   proc_obj_val, proc_UB = 0;
 
   std::cout << "subproblems_proc" << std::endl;
   double global_obj_val, global_UB = 0;
 
-  std::size_t pspc = proc_sub_prob_count[rank];
-  std::size_t pspc_y = proc_y_sub_prob_count[rank];
+  std::size_t pspc = proc_sub_prob_count[ranks];
+  std::size_t pspc_y = proc_y_sub_prob_count[ranks];
   int *row_assignments = new int[n * pspc];
   std::fill(row_assignments, row_assignments + n * pspc, 0);
 
@@ -138,7 +135,8 @@ int main(int argc, char **argv)
   std::size_t offset_x = 0;
   std::size_t offset_y = 0;
 
-  double start_read = MPI_Wtime();
+  Timer read_time;
+  // double start_read = t.elapsed();
 
   std::cout << "cpp fill matrix memory " << std::endl;
 
@@ -161,26 +159,25 @@ int main(int argc, char **argv)
     unsigned long seed = 0;
 
     seed = seeds[seedId];
-    if (rank == 0)
+    if (ranks == 0)
     {
       createProbGenData(prob_gen_cycle, seed);
     }
-    MPI_Bcast(prob_gen_cycle, K * n, MPI_INT, 0, MPI_COMM_WORLD);
+
     std::cout << "cycle gen" << std::endl;
 
     // std::cout << "cpp fill y_cost matrix memory done   " << std::endl;
 
-    seedId = rank;
+    seedId = ranks;
     seed = seeds[seedId];
     gen_costs_mod(cost_matrix, y_costs, prob_gen_cycle, seed, pspc, pspc_y, n, K); // Find these functions in f_cutils.cu
 
     std::cout << "gen_costs" << std::endl;
   }
-  double stop_read = MPI_Wtime();
-  double total_read_time = stop_read - start_read;
+  double total_read_time = read_time.elapsed();
 
   std::ofstream logfile(logfileName);
-  if (rank == 0)
+  if (ranks == 0)
   {
     logfile << "\nGen_time (s),\tTransfer_time(s),\tLAP_time,\tObjective_value,\tUpper_Bound,\tGap\n";
     logfile << total_read_time << ", ";
@@ -191,29 +188,30 @@ int main(int argc, char **argv)
   //
   //
 
-  double total_time_start = MPI_Wtime();
+  Timer tot_time;
   /////////////////////////////////////////////////////////////DUAL ASCENT - ENTERING DEVICE //////////////////////////////////////////////////////
-  double start_transfer = MPI_Wtime();
+
+  Timer transfer_time;
   offset_x = 0;
   offset_y = 0;
   double old_global_obj_val = 0;
   double obj_val = 0;
   double UB_val = 0;
-  for (int j = 0; j < proc_y_iterations[rank]; j++)
+  for (int j = 0; j < proc_y_iterations[ranks]; j++)
   {
     double obj_val = 0;
-    if (proc_y_iter_sub_prob_count[rank][j] > 0)
+    if (proc_y_iter_sub_prob_count[ranks][j] > 0)
     {
-      Functions rlt(MPI_COMM_WORLD, n, K, devcount, proc_y_iter_sub_prob_count[rank][j], proc_iter_sub_prob_count[rank][j], n_y_proc_iter_ptr[rank][j], n_proc_iter_ptr[rank][j], j, dev_iter_sub_prob_count, iterations);
+      Functions rlt(n, K, devcount, proc_y_iter_sub_prob_count[ranks][j], proc_iter_sub_prob_count[ranks][j], n_y_proc_iter_ptr[ranks][j], n_proc_iter_ptr[ranks][j], j, dev_iter_sub_prob_count, iterations);
       rlt.solve_DA_transfercosts(cost_matrix, y_costs, obj_val, &proc_SP_obj_val[offset_x], &row_assignments[offset_x * n], true, logfileName, UB_val);
 
       proc_obj_val += obj_val;
       proc_UB += UB_val;
-      if (proc_iter_sub_prob_count[rank][j] <= proc_sub_prob_count[rank])
+      if (proc_iter_sub_prob_count[ranks][j] <= proc_sub_prob_count[ranks])
       {
-        offset_x += proc_iter_sub_prob_count[rank][j];
+        offset_x += proc_iter_sub_prob_count[ranks][j];
       }
-      offset_y += proc_y_iter_sub_prob_count[rank][j];
+      offset_y += proc_y_iter_sub_prob_count[ranks][j];
     }
   }
   for (int p = 0; p < procsize; p++)
@@ -228,15 +226,11 @@ int main(int argc, char **argv)
   std::cout << "ub_all_batches"
             << "  " << ub_all_batches << std::endl;
 
-  MPI_Barrier(MPI_COMM_WORLD);
-  MPI_Allreduce(&proc_obj_val, &global_obj_val, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-  // MPI_Allreduce(&proc_UB, &global_UB, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-  MPI_Barrier(MPI_COMM_WORLD);
+  global_obj_val = proc_obj_val;
 
-  double end_transfer = MPI_Wtime();
-  double total_time_transfer = (end_transfer - start_transfer);
+  double total_time_transfer = transfer_time.elapsed();
 
-  if (rank == 0)
+  if (ranks == 0)
   {
     double gap = std::abs((ub_all_batches - global_obj_val) / ub_all_batches) * 100;
     // std::ofstream logfile(logfileName);
@@ -253,9 +247,8 @@ int main(int argc, char **argv)
              delete[] recvs;
              finalize();
   */
-  double total_time_end = MPI_Wtime();
-  MPI_Finalize();
-  double total_time = total_time_end - total_time_start;
+
+  double total_time = tot_time.elapsed();
   std::cout << "Total time: " << total_time << ";  LAP time " << LAP_total_time << std::endl;
 
   printToFile2(global_obj_val, ub_all_batches, n, K, procsize, devcount, total_time);

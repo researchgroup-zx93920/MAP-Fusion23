@@ -3,10 +3,10 @@
 #define FUNCTIONS_H_
 
 #include <omp.h>
-#include <mpi.h>
 // #include "structures.h"
 // #include "variables.h"
 // #include "helper_utils.h"
+#include "timer.h"
 #include "functions_cuda.h"
 #include <set>
 #include <ctime>
@@ -33,8 +33,6 @@ enum Countername
 double LAP_total_time = 0.0;
 class Functions
 {
-
-	MPI_Comm COMM;
 
 	std::size_t N, K;
 	std::size_t SP_y, SP_x; // Number of subproblems on a host.
@@ -84,7 +82,7 @@ class Functions
 	int *row_assignments;
 
 public:
-	Functions(MPI_Comm _COMM, std::size_t _size, std::size_t _K, int _numdev, int _subprob_y, int _subprob_x, int _subproboffset, int _subproboffset_X, int _iterno, int ***dispc, int _max_iter);
+	Functions(std::size_t _size, std::size_t _K, int _numdev, int _subprob_y, int _subprob_x, int _subproboffset, int _subproboffset_X, int _iterno, int ***dispc, int _max_iter);
 
 	void solve_DA_transfercosts(double *_x_costs, double *_y_costs, double &_LB, double *_proc_SP_obj_val, int *_row_assignments, bool _isFirstIter, const char *logfileName, double &_UB);
 	void getSolution(double *_costs, double &_obj_val, int *_row_assignments);
@@ -109,11 +107,8 @@ private:
 	int hungarianStep66(bool count_time, unsigned int devid);
 };
 
-Functions::Functions(MPI_Comm _COMM, std::size_t _size, std::size_t _K, int _numdev, int _subprob_y, int _subprob_x, int _subproboffset, int _subproboffset_X, int _iterno, int ***dispc, int _max_iter)
+Functions::Functions(std::size_t _size, std::size_t _K, int _numdev, int _subprob_y, int _subprob_x, int _subproboffset, int _subproboffset_X, int _iterno, int ***dispc, int _max_iter)
 {
-	COMM = _COMM;
-	MPI_Comm_size(COMM, &numprocs);
-	MPI_Comm_rank(COMM, &procid);
 
 	N = _size;
 	SP_y = _subprob_y;
@@ -328,7 +323,7 @@ void Functions::finalize_device(unsigned int devid)
 void Functions::solve_DA_transfercosts(double *_x_costs, double *_y_costs, double &_LB, double *_proc_SP_obj_val, int *_row_assignments, bool _isFirstIter, const char *logfileName, double &_UB)
 {
 
-	double iter_start = MPI_Wtime();
+	Timer iter_start;
 	h_y_costs.elements = _y_costs;
 	h_x_costs.elements = _x_costs;
 	h_row_assignments_main = _row_assignments;
@@ -339,7 +334,7 @@ void Functions::solve_DA_transfercosts(double *_x_costs, double *_y_costs, doubl
 	double total_time = 0;
 	omp_set_num_threads(numdev);
 
-	double start = MPI_Wtime();
+	Timer start;
 
 // 	/////////////////////////////////////////////////////////////////
 #pragma omp parallel
@@ -366,19 +361,17 @@ void Functions::solve_DA_transfercosts(double *_x_costs, double *_y_costs, doubl
 
 				int offset_y1 = sp_y_ptr[devid];
 
-				start_transfer = MPI_Wtime();
+				Timer time;
 				transferCosts(d_y_costs_dev, d_x_costs_dev, d_vertices_dev, N, K, devid, DSPC_x, DSPC_y, offset_y1, offset_x1);
-				end_transfer = MPI_Wtime();
+				end_transfer = time.elapsed_and_reset();
 
-				start_mult_update = MPI_Wtime();
+				// Timer start_mult;
 				multiplier_update(d_y_costs_dev, N, K, devid, DSPC_y, offset_y1, numdev, procid, numprocs);
-				end_mult_update = MPI_Wtime();
+				end_mult_update = time.elapsed_and_reset();
 
-				start_solveYLSAP = MPI_Wtime();
 				solveYLSAP(d_y_costs_dev, d_x_costs_dev, N, K, devid, DSPC_x, DSPC_y, offset_y1, offset_x1);
-				end_solveYLSAP = MPI_Wtime();
+				end_solveYLSAP = time.elapsed_and_reset();
 
-				start_solveXLAP = MPI_Wtime();
 				int step = 0;
 				int total_count = 0;
 				bool done = false;
@@ -387,11 +380,10 @@ void Functions::solve_DA_transfercosts(double *_x_costs, double *_y_costs, doubl
 				std::fill(stepcounts, stepcounts + 7, 0);
 				std::fill(steptimes, steptimes + 9, 0);
 				//  bool is_dynamic = false;
-				double LAP_time_start = MPI_Wtime();
+				Timer LAP_time_start;
 				CuLAP solvelap(N, DSPC_x[devid], devid, iter > 0); // can change to is_dynamic
 				solvelap.solve(d_x_costs_dev[devid].elements, d_vertices_dev[devid].row_assignments, d_vertices_dev[devid].row_duals, d_vertices_dev[devid].col_duals, d_x_opt_obj_dev[devid].obj);
-				// double LAP_time_end = MPI_Wtime();
-				LAP_total_time += MPI_Wtime() - LAP_time_start;
+				LAP_total_time += LAP_time_start.elapsed();
 
 				objec[devid] = reduceSUM(d_x_opt_obj_dev[devid].obj, SP_x, devid);
 
@@ -410,8 +402,7 @@ void Functions::solve_DA_transfercosts(double *_x_costs, double *_y_costs, doubl
 #pragma omp barrier
 	}
 
-	double iter_end = MPI_Wtime();
-	double iter_time = iter_end - start;
+	double iter_time = start.elapsed();
 	if (procid == 0)
 		std::cout << "time " << iter_time << std::endl;
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
