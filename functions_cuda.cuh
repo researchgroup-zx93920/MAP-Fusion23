@@ -1,4 +1,21 @@
-#include "functions_cuda.h"
+#include <cuda.h>
+#include <thrust/scan.h>
+#include <thrust/copy.h>
+#include <thrust/sort.h>
+// #include <thrust/add.h>
+#include <thrust/reduce.h>
+#include <thrust/device_ptr.h>
+#include <thrust/host_vector.h>
+#include <thrust/device_vector.h>
+#include "cuda_runtime.h"
+#include "device_launch_parameters.h"
+// #include "structures.h"
+#include "d_structs.h"
+// #include "helper_utils.h"
+#include <thrust/extrema.h>
+#include <thrust/execution_policy.h>
+#include "d_vars.h"
+#include "f_cutils.cuh"
 
 void transferCosts(Matrix *d_y_costs_dev, Matrix *d_x_costs_dev, Vertices *d_vertices_dev, int N, int K, unsigned int devid, int *DSPC_x, int *DSPC_y, int offset_y, int offset_x)
 {

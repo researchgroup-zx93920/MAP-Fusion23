@@ -12,7 +12,7 @@
 #include <cmath>
 #include "d_structs.h"
 #include "d_vars.h"
-#include "f_cutils.h"
+#include "f_cutils.cuh"
 #include "Functions.h"
 #include <thrust/set_operations.h>
 #include <random>

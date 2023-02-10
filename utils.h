@@ -2,8 +2,11 @@
 
 #include <omp.h>
 #include <thread>
+#include <iostream>
+#include <math.h>
+#include <random>
 
-void gen_costs_mod(double *cost_matrix, double *y_costs, int *cycle, unsigned long seed, int SP_x, int SP_y, std::size_t N, std::size_t K)
+void gen_costs_mod(double *cost_matrix, double *y_costs, const int *cycle, unsigned long seed, int SP_x, int SP_y, std::size_t N, std::size_t K)
 {
   double val = 0;
 
@@ -21,7 +24,7 @@ void gen_costs_mod(double *cost_matrix, double *y_costs, int *cycle, unsigned lo
   uint nthreads = std::min((uint)SP_y, (uint)std::thread::hardware_concurrency() - 3);
   std::cout << "Nthreads available: " << nthreads << std::endl;
   uint rows_per_thread = ceil(((SP_x - 1) * 1.0) / nthreads);
-  // #pragma omp parallel for
+#pragma omp parallel for
   for (uint tid = 0; tid < nthreads; tid++)
   {
     uint first_row = tid * rows_per_thread;

@@ -1,11 +1,33 @@
-/*
- * f_cutils.cpp
- *
- *  Created on: Jul 11, 2015
- *      Author: date2
- */
+#pragma once
 
-#include "f_cutils.h"
+#include <iostream>
+#include <fstream>
+#include <cuda.h>
+#include <thrust/scan.h>
+#include "cuda_runtime.h"
+#include "device_launch_parameters.h"
+#include "d_vars.h"
+#include <sstream>
+#include <random>
+#include "timer.h"
+#include <math.h>
+
+#define cudaSafeCall_new(ans, message)    \
+	{                                       \
+		gpuAssert((ans), __FILE__, __LINE__); \
+	}
+inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort = false)
+{
+	cudaDeviceSynchronize();
+	if (code != cudaSuccess)
+	{
+		// fprintf(stderr, "GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);        fprintf(stderr, "GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
+		printf("GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
+
+		// if (abort)
+		exit(1);
+	}
+}
 
 // Helper function for printing device errors.
 void cudaSafeCall(cudaError_t error, const char *message)
