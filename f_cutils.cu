@@ -634,7 +634,7 @@ void printToFile(int *row_assignments, double LB, double UB, double time, int N,
 		fileout << row_assignments[i] % N << std::endl;
 	}
 	std::stringstream ss1;
-	ss1 << "Results_Samhita_Server_3_K" << K << "_N" << n << "_S" << scorer << "_problem" << problem_number << "_proc" << procsize << "_dev" << numdev << ".txt";
+	ss1 << "./Results/Results_K" << K << "_N" << n << "_S" << scorer << "_problem" << problem_number << "_proc" << procsize << "_dev" << numdev << ".txt";
 	std::ofstream fileout1(ss1.str().c_str());
 
 	fileout1 << "Lower bound : " << LB << std::endl;
@@ -648,7 +648,7 @@ void printToFile2(double LB, double UB, int N, int K, int procsize, int numdev, 
 {
 
 	std::stringstream ss1;
-	ss1 << "Results_Samhita_Server_3_K" << K << "_N" << n << "_S" << scorer << "_problem" << problem_number << "_proc" << procsize << "_dev" << numdev << ".txt";
+	ss1 << "./Results/Results_K" << K << "_N" << n << "_S" << scorer << "_problem" << problem_number << "_proc" << procsize << "_dev" << numdev << ".txt";
 	std::ofstream fileout1(ss1.str().c_str());
 
 	fileout1 << "Procsize: " << procsize << std::endl;

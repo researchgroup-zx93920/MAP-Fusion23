@@ -107,8 +107,8 @@ int main(int argc, char **argv)
   // else
   // {
 
-  char logfileName[250];
-  sprintf(logfileName, "Log_K%zu_n%zu_s%d_p%d_proc%d_dev%d.txt", K, n, scorer, problem_number, procsize, devcount);
+  char logfileName[2500];
+  sprintf(logfileName, "./Results/Log_K%zu_n%zu_s%d_p%d_proc%d_dev%d.txt", K, n, scorer, problem_number, procsize, devcount);
 
   initialize();
   std::cout << "fin" << std::endl;
@@ -179,12 +179,13 @@ int main(int argc, char **argv)
   double stop_read = MPI_Wtime();
   double total_read_time = stop_read - start_read;
 
+  std::ofstream logfile(logfileName);
   if (rank == 0)
   {
-    std::ofstream logfile(logfileName, std::ofstream::out | std::ofstream::app);
-    logfile << "\n|Gen_time (s)|		Transfer_time(s)|	  Objective_value|	  Upper_Bound|	    		   Gap|\n";
-    logfile << total_read_time << "|";
-    logfile.close();
+    logfile << "\nGen_time (s),\tTransfer_time(s),\tLAP_time,\tObjective_value,\tUpper_Bound,\tGap\n";
+    logfile << total_read_time << ", ";
+    // logfile.close();
+    // std::ofstream logfile(filename,)
   }
   //
   //
@@ -238,8 +239,9 @@ int main(int argc, char **argv)
   if (rank == 0)
   {
     double gap = std::abs((ub_all_batches - global_obj_val) / ub_all_batches) * 100;
-    std::ofstream logfile(logfileName, std::ofstream::out | std::ofstream::app);
-    logfile << std::setw(20) << total_time_transfer << "|" << std::setw(26) << global_obj_val << "|" << std::setw(26) << ub_all_batches << "|" << std::setw(26) << gap << "%|" << std::endl;
+    // std::ofstream logfile(logfileName);
+    logfile << total_time_transfer << ", " << LAP_total_time << ", " << global_obj_val << ", " << ub_all_batches << ", " << gap << std::endl;
+    logfile.close();
   }
 
   /*
