@@ -47,8 +47,8 @@ void solveYLSAP(Matrix *d_y_costs_dev, Matrix *d_x_costs_dev, int N, int K, unsi
 	dim3 blocks_per_grid;
 	dim3 threads_per_block;
 	int total_blocks = 0;
-	int y_size = N * N * N;
-	int x_size = N * N;
+	// int y_size = N * N * N;
+	// int x_size = N * N;
 	// printf("%d\n", DSPC_y[devid]);
 
 	calculateRectangularDims(blocks_per_grid, threads_per_block, total_blocks, N, N);
@@ -167,7 +167,7 @@ __global__ void kernel_multiplier_update_cuda(double *d_y_costs, std::size_t N, 
 			std::size_t k = ijk % N;
 			std::size_t y_size = N * N * N;
 
-			if (ylapid >= 0 && ylapid < K - 2 && j < N && k < N)
+			if (ylapid < K - 2 && j < N && k < N)
 			{
 
 				double sum = 0;
@@ -227,7 +227,7 @@ __global__ void kernel_multiplier_update_cuda(double *d_y_costs, std::size_t N, 
 			std::size_t k = ijk % N;
 			std::size_t y_size = N * N * N;
 
-			if (ylapid >= 0 && ylapid < K - 2 && j < N && k < N)
+			if (ylapid < K - 2 && j < N && k < N)
 			{
 
 				double sum = 0;

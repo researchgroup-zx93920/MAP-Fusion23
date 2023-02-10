@@ -580,7 +580,7 @@ void readFiley(double *cost_matrix, const char *filename)
 		int K = 0;
 		myfile >> N;
 		myfile >> K;
-		long N2 = N * N * N * (K - 2);
+		// long N2 = N * N * N * (K - 2);
 
 		// for(int i =0;i<N2;i++){
 		// 		// int id = N * N * N * (p) + (i* N * N) + (j * N) + k ;
@@ -726,7 +726,7 @@ void gen_costs(double *cost_matrix, double *y_costs, int *cycle, unsigned long s
 	std::cout << "gen x costs" << std::endl;
 	val = 0;
 	value = 0;
-	long count = 0;
+	// long count = 0;
 	std::size_t p2 = 0;
 	std::size_t i2 = 0;
 	std::size_t j2 = 0;
@@ -835,7 +835,7 @@ void gen_costs_mod(double *cost_matrix, double *y_costs, int *cycle, unsigned lo
 	std::cout << "gen x costs" << std::endl;
 	val = 0;
 	value = 0;
-	long count = 0;
+	// long count = 0;
 	std::size_t p2 = 0;
 	std::size_t i2 = 0;
 	std::size_t j2 = 0;
