@@ -1,0 +1,7 @@
+*.zip
+Costs/**
+*.o
+test
+.vscode/**
+.DS_Store
+*.txt
