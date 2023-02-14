@@ -63,8 +63,6 @@ void gen_costs_mod(double *cost_matrix, double *y_costs, const int *cycle, unsig
   std::size_t j2 = 0;
   std::size_t k2 = 0;
   rows_per_thread = ceil(((SP_y - 1) * 1.0) / nthreads);
-  std::cout << rows_per_thread << std::endl;
-  checkpoint();
 #pragma omp parallel for num_threads(nthreads)
   for (uint tid = 0; tid < nthreads; tid++)
   {
@@ -113,5 +111,5 @@ void gen_costs_mod(double *cost_matrix, double *y_costs, const int *cycle, unsig
       }
     }
   }
-  std::cout << "gen last costs" << std::endl;
+  std::cout << "last costs generated" << std::endl;
 }

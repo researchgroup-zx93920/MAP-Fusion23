@@ -1,4 +1,3 @@
-
 #include <unistd.h>
 #include <iomanip>
 #include <iostream>
@@ -109,12 +108,12 @@ int main(int argc, char **argv)
 
   initialize();
   std::cout << "fin" << std::endl;
-  int subproblems_proc = proc_sub_prob_count[ranks];
-  int subproblems_y_proc = proc_y_sub_prob_count[ranks];
-  proc_obj_val, proc_UB = 0;
+  // int subproblems_proc = proc_sub_prob_count[ranks];
+  // int subproblems_y_proc = proc_y_sub_prob_count[ranks];
 
   std::cout << "subproblems_proc" << std::endl;
-  double global_obj_val, global_UB = 0;
+  double global_obj_val = 0;
+  // double global_UB = 0;
 
   std::size_t pspc = proc_sub_prob_count[ranks];
   std::size_t pspc_y = proc_y_sub_prob_count[ranks];
@@ -125,7 +124,6 @@ int main(int argc, char **argv)
   //    int *greedy_row_assignments = new int[n * pspc];
   double *proc_SP_obj_val = new double[pspc];
   //   int *global_row_assignments = new int[n * sub_prob_count];
-  checkpoint();
   double *global_SP_obj_val = new double[sub_prob_count];
   int *disps = new int[procsize];
   int *recvs = new int[procsize];
@@ -134,7 +132,6 @@ int main(int argc, char **argv)
   checkpoint();
   // double *y_costs;
   double *y_costs = new double[n * n * n * (pspc_y)];
-  // checkpoint();
   std::size_t offset_x = 0;
   std::size_t offset_y = 0;
 
@@ -173,7 +170,7 @@ int main(int argc, char **argv)
     seed = seeds[seedId];
     gen_costs_mod(cost_matrix, y_costs, prob_gen_cycle, seed, pspc, pspc_y, n, K); // Find these functions in f_cutils.cu
 
-    std::cout << "gen_costs" << std::endl;
+    std::cout << "all costs generated" << std::endl;
   }
   double total_read_time = read_time.elapsed();
 
@@ -195,8 +192,7 @@ int main(int argc, char **argv)
   Timer transfer_time;
   offset_x = 0;
   offset_y = 0;
-  double old_global_obj_val = 0;
-  double obj_val = 0;
+
   double UB_val = 0;
   for (int j = 0; j < proc_y_iterations[ranks]; j++)
   {
@@ -356,7 +352,7 @@ void initialize()
   int overflow = sub_prob_count % procsize;
   y_sp_proc_split = new int[procsize + 1];
   y_sp_dev_split = new int[devcount + 1];
-  int MIN_GPU = procsize * devcount;
+  // int MIN_GPU = procsize * devcount;
 
   proc_y_sub_prob_count = new int[procsize];
   proc_y_iterations = new int[procsize];
@@ -388,6 +384,7 @@ void initialize()
 
   ////////////////////////////////////////////////////////////////////////////////PROC LEVEL///////////////////////////////////////////////////////////
   int extra_proc_overflow_y = 0, extra_proc_overflow_x = 0;
+  bool false_flag = false;
   for (int i = 0; i < procsize - 1; i++)
   {
     if (proc_sub_prob_count[i] > proc_y_sub_prob_count[i])
@@ -420,7 +417,7 @@ void initialize()
         } // 4
         else
         { // 4
-          bool false_flag = true;
+          false_flag = true;
         } // 4
       }   // 3
       else if (proc_sub_prob_count[j + 1] % 2 == 0)
@@ -433,15 +430,17 @@ void initialize()
       } // 3
       else
       { // 3
-        bool false_flag = true;
+        false_flag = true;
       } // 3
     }   // 2
     else
     { // 2
-      bool false_flag = true;
+      false_flag = true;
     } // 2
 
   } // 1
+  if (false_flag)
+    printf("False flag is True!!");
 
   // for (int i = 0; i < procsize; i++)
   // {
@@ -498,7 +497,7 @@ void initialize()
           }
           else
           {
-            bool false_flag = true;
+            false_flag = true;
           }
         }
         else if (dev_sub_prob_count[i][j + 1] % 2 == 0)
@@ -510,12 +509,12 @@ void initialize()
         }
         else
         {
-          bool false_flag = true;
+          false_flag = true;
         }
       }
       else
       {
-        bool false_flag = true;
+        false_flag = true;
       }
     }
   }
@@ -621,7 +620,7 @@ void initialize()
             }
             else
             {
-              bool false_flag = true;
+              false_flag = true;
             }
           }
           else if (dev_iter_sub_prob_count[i][j][k + 1] % 2 == 0)
@@ -634,12 +633,12 @@ void initialize()
           }
           else
           {
-            bool false_flag = true;
+            false_flag = true;
           }
         }
         else
         {
-          bool false_flag = true;
+          false_flag = true;
         }
       }
     }

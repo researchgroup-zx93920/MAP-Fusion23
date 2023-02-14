@@ -63,7 +63,7 @@ class Functions
 	int *n_SP;
 	int *n_ptr;
 
-	std::size_t prevstep;
+	int prevstep;
 	bool flag;
 	bool isFirstIter;
 
@@ -265,7 +265,7 @@ void Functions::initialize_device(unsigned int devid)
 
 	// long size = n_SP[devid] * N;
 
-	long row_offset = n_ptr[devid] * N;
+	// long row_offset = n_ptr[devid] * N;
 
 	std::size_t size = DSPC_x[devid] * N;
 	cudaSafeCall_new(cudaMalloc((void **)(&d_vertices_dev[devid].row_assignments), size * sizeof(int)), "error in cudaMalloc d_row_assignment");
@@ -331,7 +331,6 @@ void Functions::solve_DA_transfercosts(double *_x_costs, double *_y_costs, doubl
 	Best_gap = INF;
 	Best_UB = 0;
 	Best_LB = 0;
-	double total_time = 0;
 	omp_set_num_threads(numdev);
 
 	Timer start;
@@ -372,9 +371,7 @@ void Functions::solve_DA_transfercosts(double *_x_costs, double *_y_costs, doubl
 				solveYLSAP(d_y_costs_dev, d_x_costs_dev, N, K, devid, DSPC_x, DSPC_y, offset_y1, offset_x1);
 				end_solveYLSAP = time.elapsed_and_reset();
 
-				int step = 0;
-				int total_count = 0;
-				bool done = false;
+				// bool done = false;
 				prevstep = -1;
 
 				std::fill(stepcounts, stepcounts + 7, 0);
@@ -408,11 +405,11 @@ void Functions::solve_DA_transfercosts(double *_x_costs, double *_y_costs, doubl
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	Total_objective_value = reduceSUM(global_objec_dev, numdev);
 
-	int offset_x = SP_X_offset;
+	// int offset_x = SP_X_offset;
 	std::size_t N1 = N;
 
-	std::size_t y_size1 = N1 * N1 * N1;
-	std::size_t offset_y = SP_offset;
+	// std::size_t y_size1 = N1 * N1 * N1;
+	// std::size_t offset_y = SP_offset;
 	std::size_t SP_x1 = SP_x;
 
 	std::copy(h_vertices.row_assignments, h_vertices.row_assignments + N1 * SP_x1, _row_assignments);
@@ -431,7 +428,7 @@ double Functions::getUB(double *h_x_costs, double *h_y_costs, int *row_assignmen
 {
 	double total_cost = 0;
 	std::size_t N1 = N;
-	std::size_t K1 = K;
+	// std::size_t K1 = K;
 	std::size_t p = 0;
 	std::size_t i = 0;
 	std::size_t i1 = 0;
