@@ -5,6 +5,7 @@
 #include <iostream>
 #include <math.h>
 #include <random>
+#include "f_cutils.cuh"
 
 void gen_costs_mod(double *cost_matrix, double *y_costs, const int *cycle, unsigned long seed, int SP_x, int SP_y, std::size_t N, std::size_t K)
 {
@@ -24,7 +25,7 @@ void gen_costs_mod(double *cost_matrix, double *y_costs, const int *cycle, unsig
   uint nthreads = std::min((uint)SP_y, (uint)std::thread::hardware_concurrency() - 3);
   std::cout << "Nthreads available: " << nthreads << std::endl;
   uint rows_per_thread = ceil(((SP_x - 1) * 1.0) / nthreads);
-#pragma omp parallel for
+#pragma omp parallel for num_threads(nthreads)
   for (uint tid = 0; tid < nthreads; tid++)
   {
     uint first_row = tid * rows_per_thread;
@@ -52,8 +53,8 @@ void gen_costs_mod(double *cost_matrix, double *y_costs, const int *cycle, unsig
     }
   }
   // #pragma omp barrier
-
-  std::cout << "gen x costs" << std::endl;
+  std::cout << "x costs generated" << std::endl;
+  // exit(0);
   val = 0;
   value = 0;
   // long count = 0;
@@ -63,7 +64,8 @@ void gen_costs_mod(double *cost_matrix, double *y_costs, const int *cycle, unsig
   std::size_t k2 = 0;
   rows_per_thread = ceil(((SP_y - 1) * 1.0) / nthreads);
   std::cout << rows_per_thread << std::endl;
-  // #pragma omp parallel for
+  checkpoint();
+#pragma omp parallel for num_threads(nthreads)
   for (uint tid = 0; tid < nthreads; tid++)
   {
     uint first_row = tid * rows_per_thread;
@@ -93,7 +95,7 @@ void gen_costs_mod(double *cost_matrix, double *y_costs, const int *cycle, unsig
     }
   }
 
-  std::cout << "gen y costs" << std::endl;
+  std::cout << "y costs generated" << std::endl;
   std::size_t i3 = 0;
   std::size_t j3 = 0;
   std::size_t k3 = 0;

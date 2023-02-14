@@ -118,20 +118,23 @@ int main(int argc, char **argv)
 
   std::size_t pspc = proc_sub_prob_count[ranks];
   std::size_t pspc_y = proc_y_sub_prob_count[ranks];
+  std::cout << "n*pspc " << n * pspc << std::endl;
   int *row_assignments = new int[n * pspc];
   std::fill(row_assignments, row_assignments + n * pspc, 0);
-
+  checkpoint();
   //    int *greedy_row_assignments = new int[n * pspc];
   double *proc_SP_obj_val = new double[pspc];
   //   int *global_row_assignments = new int[n * sub_prob_count];
-
+  checkpoint();
   double *global_SP_obj_val = new double[sub_prob_count];
   int *disps = new int[procsize];
   int *recvs = new int[procsize];
-
+  checkpoint();
   double *cost_matrix = new double[n * n * (pspc)];
+  checkpoint();
+  // double *y_costs;
   double *y_costs = new double[n * n * n * (pspc_y)];
-
+  // checkpoint();
   std::size_t offset_x = 0;
   std::size_t offset_y = 0;
 
@@ -160,9 +163,7 @@ int main(int argc, char **argv)
 
     seed = seeds[seedId];
     if (ranks == 0)
-    {
       createProbGenData(prob_gen_cycle, seed);
-    }
 
     std::cout << "cycle gen" << std::endl;
 

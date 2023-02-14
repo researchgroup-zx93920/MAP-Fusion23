@@ -29,6 +29,11 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort =
 	}
 }
 
+#define checkpoint()                               \
+	{                                                \
+		printf("Reached %s:%u\n", __FILE__, __LINE__); \
+	}
+
 // Helper function for printing device errors.
 void cudaSafeCall(cudaError_t error, const char *message)
 {
