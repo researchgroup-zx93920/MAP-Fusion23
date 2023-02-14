@@ -10,6 +10,9 @@ test
 
 .DS_Store
 *.txt
+*.nsys-rep
+*.sqlite
+*.log
 
 batch_run.sh
 jobscript100.sh

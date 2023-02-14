@@ -131,6 +131,7 @@ int main(int argc, char **argv)
   double *cost_matrix = new double[n * n * (pspc)];
   checkpoint();
   // double *y_costs;
+  std::cout << "pspc y: " << pspc_y << std::endl;
   double *y_costs = new double[n * n * n * (pspc_y)];
   std::size_t offset_x = 0;
   std::size_t offset_y = 0;
