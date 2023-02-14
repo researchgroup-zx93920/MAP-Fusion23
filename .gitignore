@@ -1,7 +1,10 @@
-*.zip
 Costs/**
-*.o
-test
 .vscode/**
+build/**
+include/**
+
+test
+*.zip
+*.o
 .DS_Store
 *.txt
