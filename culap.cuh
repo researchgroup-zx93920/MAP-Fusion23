@@ -4,9 +4,6 @@
 #include "d_structs.h"
 #include "d_vars.h"
 
-#ifndef CUALP_H_
-#define CUALP_H_
-
 class CuLAP
 {
 

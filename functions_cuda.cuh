@@ -17,119 +17,6 @@
 #include "d_vars.h"
 #include "f_cutils.cuh"
 
-void transferCosts(Matrix *d_y_costs_dev, Matrix *d_x_costs_dev, Vertices *d_vertices_dev, int N, int K, unsigned int devid, int *DSPC_x, int *DSPC_y, int offset_y, int offset_x)
-{
-
-	cudaSafeCall(cudaSetDevice(devid), "Error in cudaSetDevice function_cuda::initializeYCosts");
-
-	dim3 blocks_per_grid;
-	dim3 threads_per_block;
-	int total_blocks = 0;
-	int y_size = N * N * N;
-	calculateRectangularDims(blocks_per_grid, threads_per_block, total_blocks, y_size, DSPC_y[devid]);
-	kernel_transferCosts_cuda<<<blocks_per_grid, threads_per_block>>>(d_y_costs_dev[devid].elements, d_x_costs_dev[devid].elements, d_vertices_dev[devid].row_duals, d_vertices_dev[devid].col_duals, devid, N, K, DSPC_y[devid], DSPC_x[devid], offset_y, offset_x);
-	cudaDeviceSynchronize(); // was required to make the code enter the kernel
-	cudaError_t error = cudaGetLastError();
-	if (error != cudaSuccess)
-	{
-		fprintf(stderr, "ERROR: %s \n", cudaGetErrorString(error));
-	}
-	cudaSafeCall_new(cudaGetLastError(), "Error in kernel_initializeYCosts Functions initializeYCosts");
-}
-
-void multiplier_update(Matrix *d_y_costs_dev, int N, int K, unsigned int devid, int *DSPC_y, int offset_y, int devcount, int procid, int procsize)
-{
-
-	cudaSafeCall(cudaSetDevice(devid), "Error in cudaSetDevice function_cuda::initializeYCosts");
-	dim3 blocks_per_grid;
-	dim3 threads_per_block;
-	int total_blocks = 0;
-	int y_size = N * N;
-
-	calculateRectangularDims(blocks_per_grid, threads_per_block, total_blocks, y_size, DSPC_y[devid]);
-	kernel_multiplier_update_cuda<<<blocks_per_grid, threads_per_block>>>(d_y_costs_dev[devid].elements, N, K, devid, DSPC_y[devid], offset_y, devcount, procid, procsize);
-	cudaDeviceSynchronize(); // was required to make the code enter the kernel
-	cudaError_t error = cudaGetLastError();
-	if (error != cudaSuccess)
-	{
-		fprintf(stderr, "ERROR: %s \n", cudaGetErrorString(error));
-	}
-	cudaSafeCall_new(cudaGetLastError(), "Error in kernel_initializeYCosts Functions initializeYCosts");
-}
-
-void solveYLSAP(Matrix *d_y_costs_dev, Matrix *d_x_costs_dev, int N, int K, unsigned int devid, int *DSPC_x, int *DSPC_y, int offset_y, int offset_x)
-{
-
-	cudaSafeCall(cudaSetDevice(devid), "Error in cudaSetDevice function_cuda::initializeYCosts");
-	dim3 blocks_per_grid;
-	dim3 threads_per_block;
-	int total_blocks = 0;
-	// int y_size = N * N * N;
-	// int x_size = N * N;
-	// printf("%d\n", DSPC_y[devid]);
-
-	calculateRectangularDims(blocks_per_grid, threads_per_block, total_blocks, N, N);
-	for (std::size_t i = 0; i < DSPC_y[devid]; i++)
-	{
-		kernel_solveYLSAP_cuda_min<<<blocks_per_grid, threads_per_block>>>(d_y_costs_dev[devid].elements, d_x_costs_dev[devid].elements, devid, N, K, DSPC_y[devid], DSPC_x[devid], offset_y, offset_x, i);
-
-		cudaSafeCall_new(cudaGetLastError(), "Error in kernel_initializeYCosts Functions initializeYCosts");
-	}
-
-	for (int i = 0; i < DSPC_y[devid]; i++)
-	{
-		kernel_solveYLSAP_cuda_dual<<<blocks_per_grid, threads_per_block>>>(d_y_costs_dev[devid].elements, d_x_costs_dev[devid].elements, devid, N, K, DSPC_y[devid], DSPC_x[devid], offset_y, offset_x, i);
-		cudaSafeCall_new(cudaGetLastError(), "Error in kernel_initializeYCosts Functions initializeYCosts");
-	}
-
-	cudaError_t error = cudaGetLastError();
-	if (error != cudaSuccess)
-	{
-		fprintf(stderr, "ERROR: %s \n", cudaGetErrorString(error));
-	}
-	cudaSafeCall_new(cudaGetLastError(), "Error in kernel_initializeYCosts Functions initializeYCosts");
-}
-
-// void solveYLSAP(Matrix *d_y_costs_dev, Matrix *d_x_costs_dev, int N , int K, unsigned int devid, int *DSPC_x, int *DSPC_y, int offset_y, int offset_x){
-//
-// 		cudaSafeCall(cudaSetDevice(devid), "Error in cudaSetDevice function_cuda::initializeYCosts");
-// 		dim3 blocks_per_grid;
-// 		dim3 threads_per_block;
-// 		int total_blocks = 0;
-// 		int y_size = N * N * N;
-// 		int x_size = N * N;
-//
-// 		calculateRectangularDims(blocks_per_grid, threads_per_block, total_blocks, x_size, DSPC_y[devid]);
-//
-// 		cudaDeviceSynchronize(); //was required to make the code enter the kernel
-// 		cudaError_t error = cudaGetLastError();
-// 		if (error != cudaSuccess) {
-// 		fprintf(stderr, "ERROR: %s \n", cudaGetErrorString(error));
-// 		}
-// 		cudaSafeCall(cudaGetLastError(), "Error in kernel_initializeYCosts Functions initializeYCosts");
-// }
-
-void computeUB(Matrix *d_x_costs_dev, Matrix *d_y_costs_dev, Vertices *d_vertices_dev, int N, int K, Objective *d_UB_dev, unsigned int devid, int *DSPC_x)
-{
-
-	cudaSafeCall(cudaSetDevice(devid), "Error in cudaSetDevice function_cuda::initializeYCosts");
-
-	dim3 blocks_per_grid;
-	dim3 threads_per_block;
-	int total_blocks = 0;
-	int x_size = N;
-	calculateRectangularDims(blocks_per_grid, threads_per_block, total_blocks, x_size, DSPC_x[devid]);
-	kernel_computeUB<<<blocks_per_grid, threads_per_block>>>(d_y_costs_dev[devid].elements, d_x_costs_dev[devid].elements, d_vertices_dev[devid].row_assignments, N, K, DSPC_x[devid], d_UB_dev[devid].obj);
-	// cudaDeviceSynchronize(); //was required to make the code enter the kernel
-	//  printDebugArray(d_y_costs_dev[devid].elements, DSPC_y[devid] * N * N * N, 	"0", devid);
-	cudaError_t error = cudaGetLastError();
-	if (error != cudaSuccess)
-	{
-		fprintf(stderr, "ERROR: %s \n", cudaGetErrorString(error));
-	}
-	cudaSafeCall(cudaGetLastError(), "Error in kernel_initializeYCosts Functions initializeYCosts");
-}
-
 __global__ void kernel_computeUB(double *d_y_costs, double *d_x_costs, int *d_row_assignments, int N, int K, int SP, double *d_UB)
 {
 
@@ -332,4 +219,117 @@ __global__ void kernel_solveYLSAP_cuda_dual(double *d_y_costs, double *d_x_costs
 			d_y_costs[ylapid * N * N * N + k * N * N + i * N + j] -= min;
 		}
 	}
+}
+
+void transferCosts(Matrix *d_y_costs_dev, Matrix *d_x_costs_dev, Vertices *d_vertices_dev, int N, int K, unsigned int devid, int *DSPC_x, int *DSPC_y, int offset_y, int offset_x)
+{
+
+	cudaSafeCall(cudaSetDevice(devid), "Error in cudaSetDevice function_cuda::initializeYCosts");
+
+	dim3 blocks_per_grid;
+	dim3 threads_per_block;
+	int total_blocks = 0;
+	int y_size = N * N * N;
+	calculateRectangularDims(blocks_per_grid, threads_per_block, total_blocks, y_size, DSPC_y[devid]);
+	kernel_transferCosts_cuda<<<blocks_per_grid, threads_per_block>>>(d_y_costs_dev[devid].elements, d_x_costs_dev[devid].elements, d_vertices_dev[devid].row_duals, d_vertices_dev[devid].col_duals, devid, N, K, DSPC_y[devid], DSPC_x[devid], offset_y, offset_x);
+	cudaDeviceSynchronize(); // was required to make the code enter the kernel
+	cudaError_t error = cudaGetLastError();
+	if (error != cudaSuccess)
+	{
+		fprintf(stderr, "ERROR: %s \n", cudaGetErrorString(error));
+	}
+	cudaSafeCall_new(cudaGetLastError(), "Error in kernel_initializeYCosts Functions initializeYCosts");
+}
+
+void multiplier_update(Matrix *d_y_costs_dev, int N, int K, unsigned int devid, int *DSPC_y, int offset_y, int devcount, int procid, int procsize)
+{
+
+	cudaSafeCall(cudaSetDevice(devid), "Error in cudaSetDevice function_cuda::initializeYCosts");
+	dim3 blocks_per_grid;
+	dim3 threads_per_block;
+	int total_blocks = 0;
+	int y_size = N * N;
+
+	calculateRectangularDims(blocks_per_grid, threads_per_block, total_blocks, y_size, DSPC_y[devid]);
+	kernel_multiplier_update_cuda<<<blocks_per_grid, threads_per_block>>>(d_y_costs_dev[devid].elements, N, K, devid, DSPC_y[devid], offset_y, devcount, procid, procsize);
+	cudaDeviceSynchronize(); // was required to make the code enter the kernel
+	cudaError_t error = cudaGetLastError();
+	if (error != cudaSuccess)
+	{
+		fprintf(stderr, "ERROR: %s \n", cudaGetErrorString(error));
+	}
+	cudaSafeCall_new(cudaGetLastError(), "Error in kernel_initializeYCosts Functions initializeYCosts");
+}
+
+void solveYLSAP(Matrix *d_y_costs_dev, Matrix *d_x_costs_dev, int N, int K, unsigned int devid, int *DSPC_x, int *DSPC_y, int offset_y, int offset_x)
+{
+
+	cudaSafeCall(cudaSetDevice(devid), "Error in cudaSetDevice function_cuda::initializeYCosts");
+	dim3 blocks_per_grid;
+	dim3 threads_per_block;
+	int total_blocks = 0;
+	// int y_size = N * N * N;
+	// int x_size = N * N;
+	// printf("%d\n", DSPC_y[devid]);
+
+	calculateRectangularDims(blocks_per_grid, threads_per_block, total_blocks, N, N);
+	for (std::size_t i = 0; i < DSPC_y[devid]; i++)
+	{
+		kernel_solveYLSAP_cuda_min<<<blocks_per_grid, threads_per_block>>>(d_y_costs_dev[devid].elements, d_x_costs_dev[devid].elements, devid, N, K, DSPC_y[devid], DSPC_x[devid], offset_y, offset_x, i);
+
+		cudaSafeCall_new(cudaGetLastError(), "Error in kernel_initializeYCosts Functions initializeYCosts");
+	}
+
+	for (int i = 0; i < DSPC_y[devid]; i++)
+	{
+		kernel_solveYLSAP_cuda_dual<<<blocks_per_grid, threads_per_block>>>(d_y_costs_dev[devid].elements, d_x_costs_dev[devid].elements, devid, N, K, DSPC_y[devid], DSPC_x[devid], offset_y, offset_x, i);
+		cudaSafeCall_new(cudaGetLastError(), "Error in kernel_initializeYCosts Functions initializeYCosts");
+	}
+
+	cudaError_t error = cudaGetLastError();
+	if (error != cudaSuccess)
+	{
+		fprintf(stderr, "ERROR: %s \n", cudaGetErrorString(error));
+	}
+	cudaSafeCall_new(cudaGetLastError(), "Error in kernel_initializeYCosts Functions initializeYCosts");
+}
+
+// void solveYLSAP(Matrix *d_y_costs_dev, Matrix *d_x_costs_dev, int N , int K, unsigned int devid, int *DSPC_x, int *DSPC_y, int offset_y, int offset_x){
+//
+// 		cudaSafeCall(cudaSetDevice(devid), "Error in cudaSetDevice function_cuda::initializeYCosts");
+// 		dim3 blocks_per_grid;
+// 		dim3 threads_per_block;
+// 		int total_blocks = 0;
+// 		int y_size = N * N * N;
+// 		int x_size = N * N;
+//
+// 		calculateRectangularDims(blocks_per_grid, threads_per_block, total_blocks, x_size, DSPC_y[devid]);
+//
+// 		cudaDeviceSynchronize(); //was required to make the code enter the kernel
+// 		cudaError_t error = cudaGetLastError();
+// 		if (error != cudaSuccess) {
+// 		fprintf(stderr, "ERROR: %s \n", cudaGetErrorString(error));
+// 		}
+// 		cudaSafeCall(cudaGetLastError(), "Error in kernel_initializeYCosts Functions initializeYCosts");
+// }
+
+void computeUB(Matrix *d_x_costs_dev, Matrix *d_y_costs_dev, Vertices *d_vertices_dev, int N, int K, Objective *d_UB_dev, unsigned int devid, int *DSPC_x)
+{
+
+	cudaSafeCall(cudaSetDevice(devid), "Error in cudaSetDevice function_cuda::initializeYCosts");
+
+	dim3 blocks_per_grid;
+	dim3 threads_per_block;
+	int total_blocks = 0;
+	int x_size = N;
+	calculateRectangularDims(blocks_per_grid, threads_per_block, total_blocks, x_size, DSPC_x[devid]);
+	kernel_computeUB<<<blocks_per_grid, threads_per_block>>>(d_y_costs_dev[devid].elements, d_x_costs_dev[devid].elements, d_vertices_dev[devid].row_assignments, N, K, DSPC_x[devid], d_UB_dev[devid].obj);
+	// cudaDeviceSynchronize(); //was required to make the code enter the kernel
+	//  printDebugArray(d_y_costs_dev[devid].elements, DSPC_y[devid] * N * N * N, 	"0", devid);
+	cudaError_t error = cudaGetLastError();
+	if (error != cudaSuccess)
+	{
+		fprintf(stderr, "ERROR: %s \n", cudaGetErrorString(error));
+	}
+	cudaSafeCall(cudaGetLastError(), "Error in kernel_initializeYCosts Functions initializeYCosts");
 }

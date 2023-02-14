@@ -7,7 +7,7 @@
 // #include "variables.h"
 // #include "helper_utils.h"
 #include "timer.h"
-#include "functions_cuda.h"
+#include "functions_cuda.cuh"
 #include <set>
 #include <ctime>
 #include <unistd.h>
@@ -18,10 +18,10 @@
 #include <algorithm>
 #include <climits>
 #include <cmath>
-#include "culap.h"
+#include "culap.cuh"
 #include "d_structs.h"
 #include "d_vars.h"
-#include "f_cutils.h"
+#include "f_cutils.cuh"
 #include <cstddef>
 
 enum Countername

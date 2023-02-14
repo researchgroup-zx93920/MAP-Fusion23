@@ -1,6 +1,7 @@
 Costs/**
 .vscode/**
 jobs/**
+build/**
 
 test
 
