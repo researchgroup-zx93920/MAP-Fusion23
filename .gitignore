@@ -2,12 +2,15 @@ Costs/**
 .vscode/**
 jobs/**
 build/**
+Results/**
 
 test
 
 *.zip
 *.o
 
+*.nsys-rep
+*.sqlite
 .DS_Store
 *.txt
 
