@@ -1,6 +1,6 @@
 NVCC ?= nvcc
 TARGET_EXEC ?= a.out
-
+SHELL:=/bin/bash
 # EXEDIR=../test_execs
 BUILD_DIR ?=./build
 OBJ_DIR ?=$(BUILD_DIR)/o
@@ -29,8 +29,11 @@ CUDADEBUGFLAGS ?= $(INC_FLAGS) -w -g -G -Xcompiler -rdynamic -fopenmp -O3 -arch=
 NVCCOPTIONS ?=
 
 
-all: objs release_exes
+all: load objs release_exes
 dbg: debug_objs debug_exes
+
+load:
+	module load mpi
 
 objs: $(OBJS)
 debug_objs: $(DEBUG_OBJS)

@@ -9,14 +9,14 @@
 #include "d_vars.h"
 #include <sstream>
 #include <random>
-#include "timer.h"
+#include "include/Timer.h"
 #include <math.h>
 
-#define cudaSafeCall_new(ans, message)    \
-	{                                       \
-		gpuAssert((ans), __FILE__, __LINE__); \
+#define cudaSafeCall_new(ans, message)     \
+	{                                        \
+		gpuAssert1((ans), __FILE__, __LINE__); \
 	}
-inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort = false)
+inline void gpuAssert1(cudaError_t code, const char *file, int line, bool abort = false)
 {
 	cudaDeviceSynchronize();
 	if (code != cudaSuccess)
@@ -29,7 +29,7 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort =
 	}
 }
 
-#define checkpoint()                               \
+#define Hcheckpoint()                              \
 	{                                                \
 		printf("Reached %s:%u\n", __FILE__, __LINE__); \
 	}

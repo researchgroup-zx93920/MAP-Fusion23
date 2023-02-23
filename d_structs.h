@@ -5,23 +5,25 @@
  *      Author: ketandat
  */
 
-
 #ifndef D_STRUCTS_H_
 #define D_STRUCTS_H_
 
-struct Variable {
+struct Variable
+{
 	int id;
 	int spid;
 	int local_rowid; // rowid and colid in the corresponding suproblem
 	int local_colid;
 };
 
-struct YVar{
+struct YVar
+{
 	int yindex1;
 	int yindex2;
 };
 
-struct ZVar{
+struct ZVar
+{
 	int zindex1;
 	int zindex2;
 	int zindex3;
@@ -43,7 +45,6 @@ struct Matrix
 	double *elements;
 };
 
-
 struct Vertices
 {
 	int *row_assignments;
@@ -54,7 +55,6 @@ struct Vertices
 	double *col_slacks;
 	double *col_duals;
 };
-
 
 struct CompactEdges
 {
@@ -76,7 +76,8 @@ struct VertexData
 	int *is_visited;
 };
 
-struct LAPData {
+struct LAPData
+{
 	double *obj_val;
 	int *row_assignments;
 	double *row_duals;
@@ -85,36 +86,40 @@ struct LAPData {
 	double *row_min_slack;
 };
 
-struct BBXNode {
+struct BBXNode
+{
 	int ID;
 	int DEPTH;
-//	int SYM; // 0 if symmetry is invalid. 1 if symmetry is valid.
+	//	int SYM; // 0 if symmetry is invalid. 1 if symmetry is valid.
 	double LB;
 	int *x_sol; // permutation array of size n.
-//	double *x_cost; // cost array of size n * n.
+							//	double *x_cost; // cost array of size n * n.
 };
 
-struct UB_RANK {
-		double ub;
-		int rank;
+struct UB_RANK
+{
+	double ub;
+	int rank;
 };
 
-struct ExchPair {
+struct ExchPair
+{
 	double obj;
 	int fac_i;
 	int fac_j;
 };
 
-struct Facility {
+struct Facility
+{
 	int id;
 	int non_zero_count;
 	double existing_interaction;
 	double total_interaction;
 	double weighted_score;
-
 };
 
-struct WarmstartData {
+struct WarmstartData
+{
 	bool is_active;
 	int y_lap_total, z_lap_total, extra_y_lap_count, extra_z_lap_count, y_sp_grpsize, z_sp_grpsize;
 	double *x_costs, *y_costs_local, *z_costs_local;
@@ -122,19 +127,22 @@ struct WarmstartData {
 	int *y_lapid_map, *y_inverse_lapid_map, *z_lapid_map, *z_inverse_lapid_map;
 	int *y_sp_proc_split, *y_sp_dev_split, *z_sp_proc_split, *z_sp_dev_split;
 	int *x_row_assignments, *y_row_assignments, *z_row_assignments;
-
 };
 
-class CompareBBXNode {
+class CompareBBXNode
+{
 public:
-	bool operator()(BBXNode &a, BBXNode &b) {
+	bool operator()(BBXNode &a, BBXNode &b)
+	{
 		return a.LB > b.LB;
 	}
 };
 
-class CompareExchPairs {
+class CompareExchPairs
+{
 public:
-	bool operator()(ExchPair &a, ExchPair &b) {
+	bool operator()(ExchPair &a, ExchPair &b)
+	{
 		return a.obj > b.obj;
 	}
 };
@@ -154,17 +162,15 @@ struct SubProbMap
 	int *devId;
 };
 
-
 struct YSubProbMap
 {
-			  int size;
-			 int *dim1;
-			 int *dim2;
-			  int *dim3;
-		  int *procId;
-		 	int *devId;
+	int size;
+	int *dim1;
+	int *dim2;
+	int *dim3;
+	int *procId;
+	int *devId;
 };
-
 
 struct SubProbDim
 {
@@ -174,9 +180,9 @@ struct SubProbDim
 
 struct YSubProbDim
 {
-  int *dim1;
-  // int *dim2;
-  // int *dim3;
+	int *dim1;
+	// int *dim2;
+	// int *dim3;
 };
 
 struct CostChange
@@ -188,9 +194,15 @@ struct CostChange
 	int *state;
 };
 
-struct Objective{
+struct Objective
+{
 	double *obj;
 };
-enum SPtype { X, Y, Z };
+enum SPtype
+{
+	X,
+	Y,
+	Z
+};
 
 #endif /* D_STRUCTS_H_ */

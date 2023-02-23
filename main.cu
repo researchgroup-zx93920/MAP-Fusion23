@@ -9,14 +9,15 @@
 #include <climits>
 #include <omp.h>
 #include <cmath>
+#include <cstddef>
+#include <thrust/set_operations.h>
+#include <random>
+
 #include "d_structs.h"
 #include "d_vars.h"
 #include "f_cutils.cuh"
 #include "Functions.h"
-#include <thrust/set_operations.h>
-#include <random>
-#include "timer.h"
-#include <cstddef>
+#include "include/Timer.h"
 #include "utils.h"
 
 int ranks = 0, procsize = 1;
@@ -30,12 +31,12 @@ int seedId = 0;
 int sub_prob_count = 0;
 int *proc_sub_prob_count = 0;
 int *proc_iterations = 0;
-int **proc_iter_sub_prob_count = 0;
+int **proc_iter_sub_prob_count = 0; // # of x subproblems
 int **dev_sub_prob_count = 0;
 int **dev_iterations = 0;
 int ***dev_iter_sub_prob_count = 0;
 int ***n_dev_iter_ptr = 0;
-int **n_proc_iter_ptr = 0;
+int **n_proc_iter_ptr = 0; // x subproblems offset
 int *n_global_ptr = 0;
 SubProbMap *spMap = 0;
 int scorer;
@@ -45,12 +46,12 @@ int *prob_gen_cycle = 0;
 int y_sub_prob_count = 0;
 int *proc_y_sub_prob_count = 0;
 int *proc_y_iterations = 0;
-int **proc_y_iter_sub_prob_count = 0;
+int **proc_y_iter_sub_prob_count = 0; // # of y subproblems
 int **dev_y_sub_prob_count = 0;
 int **dev_y_iterations = 0;
 int ***dev_y_iter_sub_prob_count = 0;
 int ***n_y_dev_iter_ptr = 0;
-int **n_y_proc_iter_ptr = 0;
+int **n_y_proc_iter_ptr = 0; // y subproblems offset
 int *n_y_global_ptr = 0;
 int *y_sp_dev_split = 0;
 int *y_sp_proc_split = 0;
@@ -95,21 +96,11 @@ int main(int argc, char **argv)
   const char *filename_triplet = argv[9]; // Provided as 0 for large tests
   const char *filename = argv[10];
 
-  // if (get_costs_from_file)
-  // {
-  //   readFiley(y_costs, filename_triplet);
-  //   readFile(cost_matrix, filename);
-  // }
-  // else
-  // {
-
   char logfileName[2500];
   sprintf(logfileName, "./Results/Log_K%zu_n%zu_s%d_p%d_proc%d_dev%d.txt", K, n, scorer, problem_number, procsize, devcount);
 
   initialize();
   std::cout << "fin" << std::endl;
-  // int subproblems_proc = proc_sub_prob_count[ranks];
-  // int subproblems_y_proc = proc_y_sub_prob_count[ranks];
 
   std::cout << "subproblems_proc" << std::endl;
   double global_obj_val = 0;
@@ -120,16 +111,11 @@ int main(int argc, char **argv)
   std::cout << "n*pspc " << n * pspc << std::endl;
   int *row_assignments = new int[n * pspc];
   std::fill(row_assignments, row_assignments + n * pspc, 0);
-  checkpoint();
-  //    int *greedy_row_assignments = new int[n * pspc];
   double *proc_SP_obj_val = new double[pspc];
-  //   int *global_row_assignments = new int[n * sub_prob_count];
   double *global_SP_obj_val = new double[sub_prob_count];
   int *disps = new int[procsize];
   int *recvs = new int[procsize];
-  checkpoint();
   double *cost_matrix = new double[n * n * (pspc)];
-  checkpoint();
   // double *y_costs;
   std::cout << "pspc y: " << pspc_y << std::endl;
   double *y_costs = new double[n * n * n * (pspc_y)];
@@ -137,14 +123,11 @@ int main(int argc, char **argv)
   std::size_t offset_y = 0;
 
   Timer read_time;
-  // double start_read = t.elapsed();
 
   std::cout << "cpp fill matrix memory " << std::endl;
 
   std::fill(cost_matrix, cost_matrix + n * n * pspc, 0);
   std::cout << "cpp fill cost matrix memory done   " << std::endl;
-
-  // std::fill(y_costs, y_costs + n * n * n * pspc_y, 0);
 
   if (get_costs_from_file)
   {
@@ -193,15 +176,22 @@ int main(int argc, char **argv)
   Timer transfer_time;
   offset_x = 0;
   offset_y = 0;
-
+  Log(debug, "y iteration count: %d\n", proc_y_iterations[ranks]);
   double UB_val = 0;
   for (int j = 0; j < proc_y_iterations[ranks]; j++)
   {
     double obj_val = 0;
+    Log(debug, "proc_y_iter_sub_prob_count: %d", proc_y_iter_sub_prob_count[ranks][j]);
     if (proc_y_iter_sub_prob_count[ranks][j] > 0)
     {
-      Functions rlt(n, K, devcount, proc_y_iter_sub_prob_count[ranks][j], proc_iter_sub_prob_count[ranks][j], n_y_proc_iter_ptr[ranks][j], n_proc_iter_ptr[ranks][j], j, dev_iter_sub_prob_count, iterations);
-      rlt.solve_DA_transfercosts(cost_matrix, y_costs, obj_val, &proc_SP_obj_val[offset_x], &row_assignments[offset_x * n], true, logfileName, UB_val);
+      // Object present on each host
+      Functions rlt(n, K, devcount, proc_y_iter_sub_prob_count[ranks][j],
+                    proc_iter_sub_prob_count[ranks][j], n_y_proc_iter_ptr[ranks][j],
+                    n_proc_iter_ptr[ranks][j], j, dev_iter_sub_prob_count, iterations);
+
+      rlt.solve_DA_transfercosts(cost_matrix, y_costs, obj_val, &proc_SP_obj_val[offset_x],
+                                 &row_assignments[offset_x * n], true,
+                                 logfileName, UB_val);
 
       proc_obj_val += obj_val;
       proc_UB += UB_val;
@@ -235,16 +225,6 @@ int main(int argc, char **argv)
     logfile << total_time_transfer << ", " << LAP_total_time << ", " << global_obj_val << ", " << ub_all_batches << ", " << gap << std::endl;
     logfile.close();
   }
-
-  /*
-             delete[] cost_matrix;
-           delete[] row_assignments;
-           delete[] global_row_assignments;
-            delete[] y_costs;
-             delete[] disps;
-             delete[] recvs;
-             finalize();
-  */
 
   double total_time = tot_time.elapsed();
   std::cout << "Total time: " << total_time << ";  LAP time " << LAP_total_time << std::endl;
