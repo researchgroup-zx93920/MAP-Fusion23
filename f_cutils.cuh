@@ -360,7 +360,7 @@ void printDebugArray(long *d_array, int size, const char *name)
 	delete[] h_array;
 }
 
-void printDebugArray(double *d_array, int size, const char *name)
+void printDebugArrayDouble(double *d_array, int size, const char *name)
 {
 
 	double *h_array = new double[size];
