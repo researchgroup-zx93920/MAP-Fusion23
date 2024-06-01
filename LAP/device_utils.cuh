@@ -34,7 +34,7 @@ struct TILED_HANDLE
   int *column_of_star_at_row; // In unified memory
   int *cover_row, *cover_column;
   int *column_of_prime_at_row, *row_of_green_at_column;
-  uint *tail;
+  uint *tail; // Only difference between TILED and GLOBAL
 
   data *max_in_mat_row, *max_in_mat_col, *d_min_in_mat_vect, *d_min_in_mat;
   int row_mask;
@@ -73,6 +73,7 @@ struct GLOBAL_HANDLE
   data *slack;
   data *min_in_rows;
   data *min_in_cols;
+  data *objective;
 
   size_t *zeros, *zeros_size_b;
   int *row_of_star_at_column;
@@ -80,7 +81,7 @@ struct GLOBAL_HANDLE
   int *cover_row, *cover_column;
   int *column_of_prime_at_row, *row_of_green_at_column;
 
-  data *max_in_mat_row, *max_in_mat_col, *d_min_in_mat_vect, *d_min_in_mat, *objective;
+  data *max_in_mat_row, *max_in_mat_col, *d_min_in_mat_vect, *d_min_in_mat;
   int row_mask;
   uint nb4;
 

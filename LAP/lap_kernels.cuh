@@ -464,6 +464,8 @@ fundef void printMatrix(data *idata)
     {
       for (uint j = 0; j < SIZE; j++)
       {
+
+        
         printf("%f, ", idata[SIZE * i + j]);
       }
       printf("\n");

@@ -34,5 +34,5 @@ enum DistanceType
   SPLINE
 };
 
-#define GATING
-// #define OLD_COSTS
+// #define GATING
+#define OLD_COSTS

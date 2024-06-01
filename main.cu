@@ -19,6 +19,7 @@
 #include "Functions.h"
 #include "include/Timer.h"
 #include "utils.h"
+#include "./cost_generator/CostGen.cuh"
 
 int ranks = 0, procsize = 1;
 
@@ -129,16 +130,21 @@ int main(int argc, char **argv)
   std::fill(cost_matrix, cost_matrix + n * n * pspc, 0);
   std::cout << "cpp fill cost matrix memory done   " << std::endl;
 
+  std::vector<uint> *ungatedY = new std::vector<uint>[pspc_y * n];
+  size_t *ungatedYscan;
+  uint *ungatedYindices;
   if (get_costs_from_file)
   {
     std::fill(y_costs, y_costs + n * n * n * pspc_y, 0);
 
     readFiley(y_costs, filename_triplet); // Find these functions in f_cutils.cu
+    Log(debug, "read Y costs");
     readFile(cost_matrix, filename);
+    Log(debug, "read X costs");
   }
   else
   {
-
+#ifdef OLD_COSTS
     prob_gen_cycle = new int[K * n];
     unsigned long seed = 0;
 
@@ -155,9 +161,53 @@ int main(int argc, char **argv)
     gen_costs_mod(cost_matrix, y_costs, prob_gen_cycle, seed, pspc, pspc_y, n, K); // Find these functions in f_cutils.cu
 
     std::cout << "all costs generated" << std::endl;
+#else
+    using namespace std;
+    CostGen *cgen = new CostGen(n, K, 4, EUCLID, seeds[0], seeds[1]);
+    cgen->generate_tracks();
+    // Position *pos_vector = cgen->tracking_gt;
+    Log(debug, "Tracks generated, need to score..");
+    cgen->generate_scores(cost_matrix, y_costs, pspc, pspc_y);
+    // exit(-1);
+    Hcheckpoint();
+    // cgen->filterUngated(y_costs, ungatedY, pspc, pspc_y);
+    Hcheckpoint();
+    size_t ungatedYsize = 0;
+    // ungatedYscan = new size_t[K * n];
+    CUDA_RUNTIME(cudaMallocManaged((void **)&ungatedYscan, pspc_y * n * sizeof(size_t)));
+    for (uint k = 0; k < pspc_y; k++)
+    {
+      for (uint i = 0; i < n; i++)
+      {
+        ungatedYscan[k * n + i] = ungatedY[k * n + i].size() + ungatedYsize;
+        ungatedYsize += ungatedY[k * n + i].size();
+      }
+    }
+    Hcheckpoint();
+    Log(debug, "y indices size: %lu", ungatedYsize);
+    // printDebugArray(ungatedYscan, pspc_y * n, "y scan:");
+    CUDA_RUNTIME(cudaMallocManaged((void **)&ungatedYindices, ungatedYsize * sizeof(uint)));
+    size_t index = 0;
+    for (uint k = 0; k < pspc_y; k++)
+    {
+      for (uint i = 0; i < n; i++)
+      {
+        // needs C++11
+        for (auto iter = ungatedY[k * n + i].begin(); iter != ungatedY[k * n + i].end(); ++iter)
+        {
+          // cout << *iter << endl;
+          ungatedYindices[index++] = *iter;
+        }
+        // cout << "length (" << k << " " << i << " ):" << ungatedYscan[k * n + i] << endl;
+      }
+      // exit(-1);
+    }
+    Hcheckpoint();
+#endif
   }
-  double total_read_time = read_time.elapsed();
 
+  double total_read_time = read_time.elapsed();
+  Log(debug, "Cost generate/read done");
   std::ofstream logfile(logfileName);
   if (ranks == 0)
   {
@@ -176,7 +226,6 @@ int main(int argc, char **argv)
   Timer transfer_time;
   offset_x = 0;
   offset_y = 0;
-  Log(debug, "y iteration count: %d\n", proc_y_iterations[ranks]);
   double UB_val = 0;
   for (int j = 0; j < proc_y_iterations[ranks]; j++)
   {
@@ -187,6 +236,7 @@ int main(int argc, char **argv)
       // Object present on each host
       Functions rlt(n, K, devcount, proc_y_iter_sub_prob_count[ranks][j],
                     proc_iter_sub_prob_count[ranks][j], n_y_proc_iter_ptr[ranks][j],
+                    ungatedYindices, ungatedYscan,
                     n_proc_iter_ptr[ranks][j], j, dev_iter_sub_prob_count, iterations);
 
       rlt.solve_DA_transfercosts(cost_matrix, y_costs, obj_val, &proc_SP_obj_val[offset_x],
@@ -209,18 +259,26 @@ int main(int argc, char **argv)
   }
 
   double ub_all_batches = 0;
+  // printHostMatrix(cost_matrix, n, n, "x costs");
   ub_all_batches = getUB_all_batches(cost_matrix, y_costs, row_assignments, n);
+  // printHostMatrix(row_assignments, K - 1, n, "assignments");
+  double MMEP_score = getMMEP(row_assignments, n, K);
+  double ITCP_score = getITCP(row_assignments, n, K);
+  Log(info, "MMEP score %f %%", MMEP_score);
+  Log(info, "ITCP score %f %%", ITCP_score);
 
-  std::cout << "ub_all_batches"
-            << "  " << ub_all_batches << std::endl;
-
+  // std::cout << "ub_all_batches"
+  //           << "  " << ub_all_batches << std::endl;
   global_obj_val = proc_obj_val;
+  Log(info, "obj_value (LB): %f", global_obj_val);
+  Log(info, "UB: %f", ub_all_batches);
 
   double total_time_transfer = transfer_time.elapsed();
 
   if (ranks == 0)
   {
     double gap = std::abs((ub_all_batches - global_obj_val) / ub_all_batches) * 100;
+    Log(info, "gap: %f %", gap);
     // std::ofstream logfile(logfileName);
     logfile << total_time_transfer << ", " << LAP_total_time << ", " << global_obj_val << ", " << ub_all_batches << ", " << gap << std::endl;
     logfile.close();
@@ -230,7 +288,9 @@ int main(int argc, char **argv)
   std::cout << "Total time: " << total_time << ";  LAP time " << LAP_total_time << std::endl;
 
   printToFile2(global_obj_val, ub_all_batches, n, K, procsize, devcount, total_time);
-
+  cudaFree(ungatedYscan);
+  cudaFree(ungatedYindices);
+  delete[] ungatedY;
   return 0;
 }
 

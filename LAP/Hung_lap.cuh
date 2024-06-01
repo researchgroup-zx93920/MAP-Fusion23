@@ -186,6 +186,9 @@ public:
     th.objective = obj;
     int nblocks = maxtile;
     CUDA_RUNTIME(cudaMemcpy(th.slack, th.cost, nprob_ * size_ * size_ * sizeof(data), cudaMemcpyDefault));
+    CUDA_RUNTIME(cudaMemset(th.objective, 0, nprob_ * sizeof(data)));
+    CUDA_RUNTIME(cudaMemset(th.min_in_rows, 0, nprob_ * size_ * sizeof(data)));
+    CUDA_RUNTIME(cudaMemset(th.min_in_cols, 0, nprob_ * size_ * sizeof(data)));
     // Log(debug, "nblocks from external solve: %d\n", nblocks);
     Timer t;
     execKernel((THA<data, nthr>), nblocks, nthr, dev_, false, th);
