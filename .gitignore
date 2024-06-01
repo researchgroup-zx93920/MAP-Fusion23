@@ -3,6 +3,9 @@ Costs/**
 jobs/**
 build/**
 Results/**
+ketan/**
+ungated*/**
+
 
 test
 
@@ -13,6 +16,9 @@ test
 *.sqlite
 .DS_Store
 *.txt
+*.nsys-rep
+*.sqlite
+*.log
 
 batch_run.sh
 jobscript100.sh

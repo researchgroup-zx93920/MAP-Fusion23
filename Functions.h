@@ -6,7 +6,7 @@
 // #include "structures.h"
 // #include "variables.h"
 // #include "helper_utils.h"
-#include "timer.h"
+#include "include/Timer.h"
 #include "functions_cuda.cuh"
 #include <set>
 #include <ctime>
@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <climits>
 #include <cmath>
+#include "LAP/Hung_lap.cuh"
 #include "culap.cuh"
 #include "d_structs.h"
 #include "d_vars.h"
@@ -35,19 +36,24 @@ class Functions
 {
 
 	std::size_t N, K;
-	std::size_t SP_y, SP_x; // Number of subproblems on a host.
-	std::size_t SP_offset, SP_X_offset;
+	std::size_t SP_y, SP_x;	 // Number of subproblems on a host.
+	std::size_t SP_offset;	 // y offset on host
+	std::size_t SP_X_offset; // x offset on host
 	std::size_t iterno;
 
 	int numprocs;
 	std::size_t numdev;
 	int procid;
-	int *sp_y_ptr, *sp_x_ptr;
+	int *sp_y_ptr, *sp_x_ptr; // offsets
 	std::size_t devid;
 
 	YSubProbDim *d_sp_y_dim;
 	SubProbDim *d_sp_x_dim;
-	Matrix h_y_costs, *d_y_costs_dev, h_x_costs, *d_x_costs_dev, *d_x_old_costs_dev, *d_y_old_costs_dev, *d_y_new_costs_dev, *d_x_new_costs_dev;
+	Matrix h_y_costs, *d_y_costs_dev, *d_y_old_costs_dev, *d_y_new_costs_dev;
+	Matrix h_x_costs, *d_x_costs_dev, *d_x_old_costs_dev, *d_x_new_costs_dev;
+
+	uint *ungatedYindices;
+	size_t *ungatedYscan;
 	double *_x_costs, *_y_costs;
 	int *DSPC_y, *DSPC_x;
 	std::size_t y_size, x_size;
@@ -82,12 +88,13 @@ class Functions
 	int *row_assignments;
 
 public:
-	Functions(std::size_t _size, std::size_t _K, int _numdev, int _subprob_y, int _subprob_x, int _subproboffset, int _subproboffset_X, int _iterno, int ***dispc, int _max_iter);
+	Functions(std::size_t _size, std::size_t _K, int _numdev, int _subprob_y, int _subprob_x, int _subproboffset,
+						uint *ungatedYindices, size_t *ungatedYscan,
+						int _subproboffset_X, int _iterno, int ***dispc, int _max_iter);
 
-	void solve_DA_transfercosts(double *_x_costs, double *_y_costs, double &_LB, double *_proc_SP_obj_val, int *_row_assignments, bool _isFirstIter, const char *logfileName, double &_UB);
-	void getSolution(double *_costs, double &_obj_val, int *_row_assignments);
-	void printStepTimes(void);
-	void printStepCounts(void);
+	void solve_DA_transfercosts(double *_x_costs, double *_y_costs, double &_LB,
+															double *_proc_SP_obj_val, int *_row_assignments, bool _isFirstIter,
+															const char *logfileName, double &_UB);
 
 	~Functions();
 
@@ -96,18 +103,12 @@ private:
 	void initialize_device(unsigned int devid);
 	void finalize_device(unsigned int devid);
 	double getUB(double *h_x_costs, double *h_y_costs, int *row_assignment, int SP_x);
-
-	int hungarianStep0(bool count_time, unsigned int devid);
-	int hungarianStep1(bool count_time, unsigned int devid);
-	int hungarianStep2(bool count_time, unsigned int devid);
-	int hungarianStep3(bool count_time, unsigned int devid);
-	int hungarianStep4(bool count_time, unsigned int devid);
-	int hungarianStep5(bool count_time, unsigned int devid);
-	int hungarianStep6(bool count_time, unsigned int devid);
-	int hungarianStep66(bool count_time, unsigned int devid);
 };
 
-Functions::Functions(std::size_t _size, std::size_t _K, int _numdev, int _subprob_y, int _subprob_x, int _subproboffset, int _subproboffset_X, int _iterno, int ***dispc, int _max_iter)
+Functions::Functions(std::size_t _size, std::size_t _K, int _numdev, int _subprob_y,
+										 int _subprob_x, int _subproboffset,
+										 uint *_ungatedYindices, size_t *_ungatedYscan,
+										 int _subproboffset_X, int _iterno, int ***dispc, int _max_iter)
 {
 
 	N = _size;
@@ -117,6 +118,9 @@ Functions::Functions(std::size_t _size, std::size_t _K, int _numdev, int _subpro
 	SP_offset = _subproboffset;
 	SP_X_offset = _subproboffset_X;
 	max_iter = _max_iter;
+
+	ungatedYindices = _ungatedYindices;
+	ungatedYscan = _ungatedYscan;
 
 	numdev = _numdev;
 	iterno = _iterno;
@@ -169,9 +173,6 @@ Functions::Functions(std::size_t _size, std::size_t _K, int _numdev, int _subpro
 	isFirstIter = false;
 
 	initial_assignment_count = 0;
-
-	stepcounts = new int[7];
-	steptimes = new double[9];
 
 	d_vertices_dev = new Vertices[numdev];
 	d_edges_csr_dev = new CompactEdges[numdev];
@@ -243,84 +244,49 @@ void Functions::initialize_device(unsigned int devid)
 	DSPC_x[devid] = dev_iter_sub_prob_count[procid][devid][iterno];
 
 	int offset_x = sp_x_ptr[devid];
-
 	int offset_y = sp_y_ptr[devid];
 
 	std::size_t N1 = N;
 	std::size_t y_size1 = N1 * N1 * N1;
 	std::size_t offset_y1 = offset_y;
 
-	cudaSafeCall_new(cudaMalloc((void **)&d_y_costs_dev[devid].elements, (std::size_t(DSPC_y[devid])) * y_size1 * sizeof(double)), "error in cudaMalloc Functions d_y_costs");
-
-	cudaSafeCall_new(cudaMalloc((void **)&d_x_costs_dev[devid].elements, (std::size_t(DSPC_x[devid])) * x_size * sizeof(double)), "error in cudaMalloc Functions d_x_costs");
-
-	cudaSafeCall_new(cudaMalloc((void **)&d_x_opt_obj_dev[devid].obj, (std::size_t(SP_x)) * sizeof(double)), "error in cudaMalloc Functions d_x_opt_obj");
-	//  cudaSafeCall_new(cudaMalloc((void**) &d_UB_dev[devid].obj,  SP_x * sizeof(double)), "error in cudaMalloc Functions d_UB_dev");
-
-	cudaSafeCall_new(cudaMemcpy(d_y_costs_dev[devid].elements, &h_y_costs.elements[y_size1 * offset_y1], (std::size_t(DSPC_y[devid])) * y_size1 * sizeof(double), cudaMemcpyHostToDevice), "Error in cudaMemcpy Functions d_y_costs");
+	CUDA_RUNTIME(cudaMalloc((void **)&d_y_costs_dev[devid].elements, (std::size_t(DSPC_y[devid])) * y_size1 * sizeof(double)));
+	CUDA_RUNTIME(cudaMalloc((void **)&d_x_costs_dev[devid].elements, (std::size_t(DSPC_x[devid])) * x_size * sizeof(double)));
+	CUDA_RUNTIME(cudaMalloc((void **)&d_x_opt_obj_dev[devid].obj, (std::size_t(SP_x)) * sizeof(double)));
+	CUDA_RUNTIME(cudaMemcpy(d_y_costs_dev[devid].elements, &h_y_costs.elements[y_size1 * offset_y1], (std::size_t(DSPC_y[devid])) * y_size1 * sizeof(double), cudaMemcpyHostToDevice));
 
 	std::size_t x_size1 = N1 * N1;
 	std::size_t offset_x1 = offset_x;
-	cudaSafeCall_new(cudaMemcpy(d_x_costs_dev[devid].elements, &h_x_costs.elements[offset_x1 * x_size1], (std::size_t(DSPC_x[devid])) * x_size1 * sizeof(double), cudaMemcpyHostToDevice), "Error in cudaMemcpy Functions d_x_costs");
+	CUDA_RUNTIME(cudaMemcpy(d_x_costs_dev[devid].elements, &h_x_costs.elements[offset_x1 * x_size1], (std::size_t(DSPC_x[devid])) * x_size1 * sizeof(double), cudaMemcpyHostToDevice));
 
 	// long size = n_SP[devid] * N;
 
 	// long row_offset = n_ptr[devid] * N;
 
 	std::size_t size = DSPC_x[devid] * N;
-	cudaSafeCall_new(cudaMalloc((void **)(&d_vertices_dev[devid].row_assignments), size * sizeof(int)), "error in cudaMalloc d_row_assignment");
-	cudaSafeCall_new(cudaMalloc((void **)(&d_vertices_dev[devid].col_assignments), size * sizeof(int)), "error in cudaMalloc d_col_assignment");
-	cudaSafeCall_new(cudaMalloc((void **)(&d_vertices_dev[devid].row_covers), size * sizeof(int)), "error in cudaMalloc d_row_covers");
-	cudaSafeCall_new(cudaMalloc((void **)(&d_vertices_dev[devid].col_covers), size * sizeof(int)), "error in cudaMalloc d_col_covers");
-	cudaSafeCall_new(cudaMalloc((void **)(&d_vertices_dev[devid].row_duals), size * sizeof(double)), "error in cudaMalloc d_row_covers");
-	cudaSafeCall_new(cudaMalloc((void **)(&d_vertices_dev[devid].col_duals), size * sizeof(double)), "error in cudaMalloc d_col_covers");
-
-	cudaSafeCall_new(cudaMemset(d_vertices_dev[devid].row_assignments, -1, size * sizeof(int)), "Error in cudaMemset d_row_assignment");
-
-	cudaSafeCall_new(cudaMemset(d_vertices_dev[devid].col_assignments, -1, size * sizeof(int)), "Error in cudaMemset d_col_assignment");
-
-	// cudaSafeCall_new(cudaMemset(d_vertices_dev[devid].row_assignments, 0, size * sizeof(int)), "Error in cudaMemset d_row_assignment");
-
-	// cudaSafeCall_new(cudaMemset(d_vertices_dev[devid].col_assignments, 0, size * sizeof(int)), "Error in cudaMemset d_col_assignment");
-
-	cudaSafeCall_new(cudaMemset(d_vertices_dev[devid].row_covers, 0, size * sizeof(int)), "Error in cudaMemset d_row_covers");
-	cudaSafeCall_new(cudaMemset(d_vertices_dev[devid].col_covers, 0, size * sizeof(int)), "Error in cudaMemset d_col_covers");
-	cudaSafeCall_new(cudaMemset(d_vertices_dev[devid].row_duals, 0, size * sizeof(double)), "Error in cudaMemset d_row_covers");
-	cudaSafeCall_new(cudaMemset(d_vertices_dev[devid].col_duals, 0, size * sizeof(double)), "Error in cudaMemset d_col_covers");
-
-	cudaSafeCall_new(cudaMalloc((void **)(&d_row_data_dev[devid].is_visited), size * sizeof(int)), "Error in cudaMalloc d_row_data.is_visited");
-	cudaSafeCall_new(cudaMalloc((void **)(&d_col_data_dev[devid].is_visited), size * sizeof(int)), "Error in cudaMalloc d_col_data.is_visited");
-
-	cudaSafeCall_new(cudaMalloc((void **)(&d_row_data_dev[devid].parents), size * sizeof(int)), "Error in cudaMalloc d_row_data.parents");
-	cudaSafeCall_new(cudaMalloc((void **)(&d_row_data_dev[devid].children), size * sizeof(int)), "Error in cudaMalloc d_row_data.children");
-	cudaSafeCall_new(cudaMalloc((void **)(&d_col_data_dev[devid].parents), size * sizeof(int)), "Error in cudaMalloc d_col_data.parents");
-	cudaSafeCall_new(cudaMalloc((void **)(&d_col_data_dev[devid].children), size * sizeof(int)), "Error in cudaMalloc d_col_data.children");
+	CUDA_RUNTIME(cudaMalloc((void **)(&d_vertices_dev[devid].row_assignments), size * sizeof(int)));
+	CUDA_RUNTIME(cudaMalloc((void **)(&d_vertices_dev[devid].row_duals), size * sizeof(double)));
+	CUDA_RUNTIME(cudaMalloc((void **)(&d_vertices_dev[devid].col_duals), size * sizeof(double)));
+	CUDA_RUNTIME(cudaMemset(d_vertices_dev[devid].row_assignments, -1, size * sizeof(int)));
+	CUDA_RUNTIME(cudaMemset(d_vertices_dev[devid].row_duals, 0, size * sizeof(double)));
+	CUDA_RUNTIME(cudaMemset(d_vertices_dev[devid].col_duals, 0, size * sizeof(double)));
 }
 
 void Functions::finalize_device(unsigned int devid)
 {
 
 	cudaSetDevice(devid);
-
-	cudaSafeCall_new(cudaFree(d_vertices_dev[devid].row_assignments), "Error in cudaFree d_row_assignment");
-	cudaSafeCall_new(cudaFree(d_vertices_dev[devid].col_assignments), "Error in cudaFree d_col_assignment");
-	cudaSafeCall_new(cudaFree(d_vertices_dev[devid].row_covers), "Error in cudaFree d_row_covers");
-	cudaSafeCall_new(cudaFree(d_vertices_dev[devid].col_covers), "Error in cudaFree d_col_covers");
-	cudaSafeCall_new(cudaFree(d_vertices_dev[devid].row_duals), "Error in cudaFree d_row_covers");
-	cudaSafeCall_new(cudaFree(d_vertices_dev[devid].col_duals), "Error in cudaFree d_col_covers");
-
-	cudaSafeCall_new(cudaFree(d_row_data_dev[devid].is_visited), "Error in cudaFree d_row_data.is_visited");
-	cudaSafeCall_new(cudaFree(d_col_data_dev[devid].is_visited), "Error in cudaFree d_col_data.is_visited");
-
-	cudaSafeCall_new(cudaFree(d_row_data_dev[devid].parents), "Error in cudaFree d_row_data.parents");
-	cudaSafeCall_new(cudaFree(d_row_data_dev[devid].children), "Error in cudaFree d_row_data.children");
-	cudaSafeCall_new(cudaFree(d_col_data_dev[devid].parents), "Error in cudaFree d_col_data.parents");
-	cudaSafeCall_new(cudaFree(d_col_data_dev[devid].children), "Error in cudaFree d_col_data.children");
-	cudaSafeCall_new(cudaFree(d_y_costs_dev[devid].elements), "error in cudaFree d_y_costs.elements");
-	cudaSafeCall_new(cudaFree(d_x_costs_dev[devid].elements), "error in cudaFree d_x_costs.elements");
+	CUDA_RUNTIME(cudaFree(d_y_costs_dev[devid].elements));
+	CUDA_RUNTIME(cudaFree(d_x_opt_obj_dev[devid].obj));
+	CUDA_RUNTIME(cudaFree(d_x_costs_dev[devid].elements));
+	CUDA_RUNTIME(cudaFree(d_vertices_dev[devid].row_assignments));
+	CUDA_RUNTIME(cudaFree(d_vertices_dev[devid].row_duals));
+	CUDA_RUNTIME(cudaFree(d_vertices_dev[devid].col_duals));
 }
 
-void Functions::solve_DA_transfercosts(double *_x_costs, double *_y_costs, double &_LB, double *_proc_SP_obj_val, int *_row_assignments, bool _isFirstIter, const char *logfileName, double &_UB)
+void Functions::solve_DA_transfercosts(double *_x_costs, double *_y_costs, double &_LB, double *_proc_SP_obj_val,
+																			 int *_row_assignments, bool _isFirstIter,
+																			 const char *logfileName, double &_UB)
 {
 
 	Timer iter_start;
@@ -335,17 +301,17 @@ void Functions::solve_DA_transfercosts(double *_x_costs, double *_y_costs, doubl
 
 	Timer start;
 
-// 	/////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////
 #pragma omp parallel
 	{
 		unsigned int devid = omp_get_thread_num();
 		if (n_SP[devid] > 0)
 		{
-
+			// Hcheckpoint();
 			initialize_device(devid);
-
+			// Hcheckpoint();
 			Total_objective_value = 0;
-
+			TLAP<double> *tlap = new TLAP<double>(DSPC_x[devid], N, devid);
 			for (int iter = 0; iter < max_iter; iter++)
 			{
 				objec[devid] = 0;
@@ -361,34 +327,41 @@ void Functions::solve_DA_transfercosts(double *_x_costs, double *_y_costs, doubl
 				int offset_y1 = sp_y_ptr[devid];
 
 				Timer time;
-				transferCosts(d_y_costs_dev, d_x_costs_dev, d_vertices_dev, N, K, devid, DSPC_x, DSPC_y, offset_y1, offset_x1);
+				// Hcheckpoint();
+				transferCosts(d_y_costs_dev, d_x_costs_dev, d_vertices_dev,
+											ungatedYindices, ungatedYscan,
+											N, K, devid, DSPC_x, DSPC_y, offset_y1, offset_x1);
 				end_transfer = time.elapsed_and_reset();
-
+				// Hcheckpoint();
 				// Timer start_mult;
 				multiplier_update(d_y_costs_dev, N, K, devid, DSPC_y, offset_y1, numdev, procid, numprocs);
 				end_mult_update = time.elapsed_and_reset();
-
+				// Hcheckpoint();
 				solveYLSAP(d_y_costs_dev, d_x_costs_dev, N, K, devid, DSPC_x, DSPC_y, offset_y1, offset_x1);
 				end_solveYLSAP = time.elapsed_and_reset();
 
 				// bool done = false;
 				prevstep = -1;
-
-				std::fill(stepcounts, stepcounts + 7, 0);
-				std::fill(steptimes, steptimes + 9, 0);
+				// Hcheckpoint();
 				//  bool is_dynamic = false;
 				Timer LAP_time_start;
-				CuLAP solvelap(N, DSPC_x[devid], devid, iter > 0); // can change to is_dynamic
-				solvelap.solve(d_x_costs_dev[devid].elements, d_vertices_dev[devid].row_assignments, d_vertices_dev[devid].row_duals, d_vertices_dev[devid].col_duals, d_x_opt_obj_dev[devid].obj);
+				// CuLAP solvelap(N, DSPC_x[devid], devid, iter > 0); // can change to is_dynamic
+				// solvelap.solve(d_x_costs_dev[devid].elements, d_vertices_dev[devid].row_assignments, d_vertices_dev[devid].row_duals, d_vertices_dev[devid].col_duals, d_x_opt_obj_dev[devid].obj);
+				tlap->solve(d_x_costs_dev[devid].elements, d_vertices_dev[devid].row_assignments, d_vertices_dev[devid].row_duals, d_vertices_dev[devid].col_duals, d_x_opt_obj_dev[devid].obj);
+				// printDebugMatrix(d_x_costs_dev[devid].elements, N, N, "cost matrix");
+				// printDebugArray(d_vertices_dev[devid].row_assignments, N, "row assignments");
+				// printDebugArrayDouble(d_vertices_dev[devid].row_duals, N, "row duals");
+				// printDebugArrayDouble(d_vertices_dev[devid].col_duals, N, "col duals");
 				LAP_total_time += LAP_time_start.elapsed();
-
+				// Hcheckpoint();
 				objec[devid] = reduceSUM(d_x_opt_obj_dev[devid].obj, SP_x, devid);
 
 				global_objec_dev[devid] += objec[devid];
 
-				// ///////////////////////////////////////////////////////////////Computing UB////////////////////////////////////
+				/////////////////////////////////////Computing UB////////////////////////////////////
 			}
-
+			delete tlap;
+			// Hcheckpoint();
 			std::size_t offset_x2 = n_ptr[devid];
 			std::size_t N1 = N;
 

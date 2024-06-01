@@ -1,19 +1,7 @@
 #include <cuda.h>
-#include <thrust/scan.h>
-#include <thrust/copy.h>
-#include <thrust/sort.h>
-// #include <thrust/add.h>
-#include <thrust/reduce.h>
-#include <thrust/device_ptr.h>
-#include <thrust/host_vector.h>
-#include <thrust/device_vector.h>
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
-// #include "structures.h"
 #include "d_structs.h"
-// #include "helper_utils.h"
-#include <thrust/extrema.h>
-#include <thrust/execution_policy.h>
 #include "d_vars.h"
 #include "f_cutils.cuh"
 
@@ -35,9 +23,54 @@ __global__ void kernel_computeUB(double *d_y_costs, double *d_x_costs, int *d_ro
 	}
 }
 
-__global__ void kernel_transferCosts_cuda(double *d_y_costs, double *d_x_costs, double *d_row_duals, double *d_col_duals, unsigned int devid, std::size_t N, std::size_t K, int DSPC_y, int DSPC_x, int offset_y, int offset_x)
+__global__ void kernel_transferCosts_cuda(double *d_y_costs, const double *d_x_costs,
+																					const double *d_row_duals, const double *d_col_duals,
+																					uint *indices, size_t *scan,
+																					std::size_t N, std::size_t K, int DSPC_y, int DSPC_x, int offset_y, int offset_x)
 {
 
+	__shared__ uint *list;
+	__shared__ size_t length;
+	__shared__ size_t ylapID, k;
+	if (threadIdx.x == 0)
+	{
+		if (blockIdx.x == 0)
+		{
+			list = indices;
+			length = scan[0];
+		}
+		else
+		{
+			list = &indices[scan[blockIdx.x - 1]];
+			length = scan[blockIdx.x] - scan[blockIdx.x - 1];
+		}
+		ylapID = blockIdx.x / N;
+		k = blockIdx.x % N;
+	}
+	__syncthreads();
+
+	for (size_t id = threadIdx.x; id < length; id += blockDim.x)
+	{
+		uint compound_index = list[id];
+		uint i = compound_index >> 16;
+		compound_index = list[id];
+		uint j = compound_index & 0x0000FFFF;
+		// if (blockIdx.x == 6)
+		// 	printf("compound_index: %u | i: %u, j: %u\n", compound_index, i, j);
+
+		if (i < N && j < N)
+		{
+			d_y_costs[(ylapID * N * N * N) + N * N * k + (size_t)N * i + (size_t)j] +=
+					d_x_costs[(ylapID) * (N * N) + N * i + j] - d_row_duals[(ylapID) * (N) + i] - d_col_duals[(ylapID) * (N) + j];
+		}
+	}
+}
+
+__global__ void kernel_transferCosts_cuda_old(double *d_y_costs, const double *d_x_costs,
+																							const double *d_row_duals, const double *d_col_duals,
+																							std::size_t N, std::size_t K,
+																							int DSPC_y, int DSPC_x, int offset_y, int offset_x)
+{
 	std::size_t ylapid = blockIdx.y * blockDim.y + threadIdx.y;
 	std::size_t ijk = blockIdx.x * blockDim.x + threadIdx.x;
 	if (ylapid < DSPC_y)
@@ -203,7 +236,9 @@ __global__ void kernel_solveYLSAP_cuda_min(double *d_y_costs, double *d_x_costs,
 		d_x_costs[ylapid * N * N + i * N + j] = min;
 	}
 }
-__global__ void kernel_solveYLSAP_cuda_dual(double *d_y_costs, double *d_x_costs, unsigned int devid, std::size_t N, std::size_t K, int DSPC_y, int DSPC_x, int offset_y, int offset_x, std::size_t ylapid)
+__global__ void kernel_solveYLSAP_cuda_dual_old(double *d_y_costs, double *d_x_costs,
+																								unsigned int devid, std::size_t N, std::size_t K, int DSPC_y,
+																								int DSPC_x, int offset_y, int offset_x, std::size_t ylapid)
 {
 
 	// int ylapid = blockIdx.y * blockDim.y + threadIdx.y;
@@ -221,24 +256,39 @@ __global__ void kernel_solveYLSAP_cuda_dual(double *d_y_costs, double *d_x_costs
 	}
 }
 
-void transferCosts(Matrix *d_y_costs_dev, Matrix *d_x_costs_dev, Vertices *d_vertices_dev, int N, int K, unsigned int devid, int *DSPC_x, int *DSPC_y, int offset_y, int offset_x)
+void transferCosts(Matrix *d_y_costs_dev, Matrix *d_x_costs_dev, Vertices *d_vertices_dev,
+									 uint *indices, size_t *scan,
+									 int N, int K, unsigned int devid, int *DSPC_x, int *DSPC_y, int offset_y, int offset_x)
 {
 
-	cudaSafeCall(cudaSetDevice(devid), "Error in cudaSetDevice function_cuda::initializeYCosts");
+	// cudaSafeCall(cudaSetDevice(devid), "Error in cudaSetDevice function_cuda::initializeYCosts");
+
+	// int total_blocks = n * DSPC_y[devid];
+	// int threads_per_block = 256;
+
+	// kernel_transferCosts_cuda<<<total_blocks, threads_per_block>>>(d_y_costs_dev[devid].elements, d_x_costs_dev[devid].elements,
+	// 																															 d_vertices_dev[devid].row_duals, d_vertices_dev[devid].col_duals,
+	// 																															 indices, scan,
+	// 																															 N, K, DSPC_y[devid], DSPC_x[devid], offset_y, offset_x);
 
 	dim3 blocks_per_grid;
 	dim3 threads_per_block;
 	int total_blocks = 0;
 	int y_size = N * N * N;
 	calculateRectangularDims(blocks_per_grid, threads_per_block, total_blocks, y_size, DSPC_y[devid]);
-	kernel_transferCosts_cuda<<<blocks_per_grid, threads_per_block>>>(d_y_costs_dev[devid].elements, d_x_costs_dev[devid].elements, d_vertices_dev[devid].row_duals, d_vertices_dev[devid].col_duals, devid, N, K, DSPC_y[devid], DSPC_x[devid], offset_y, offset_x);
+	kernel_transferCosts_cuda_old<<<blocks_per_grid, threads_per_block>>>(d_y_costs_dev[devid].elements, d_x_costs_dev[devid].elements,
+																																				d_vertices_dev[devid].row_duals, d_vertices_dev[devid].col_duals,
+																																				N, K, DSPC_y[devid], DSPC_x[devid], offset_y, offset_x);
+
 	cudaDeviceSynchronize(); // was required to make the code enter the kernel
 	cudaError_t error = cudaGetLastError();
+
 	if (error != cudaSuccess)
 	{
 		fprintf(stderr, "ERROR: %s \n", cudaGetErrorString(error));
 	}
 	cudaSafeCall_new(cudaGetLastError(), "Error in kernel_initializeYCosts Functions initializeYCosts");
+	// exit(-1);
 }
 
 void multiplier_update(Matrix *d_y_costs_dev, int N, int K, unsigned int devid, int *DSPC_y, int offset_y, int devcount, int procid, int procsize)
@@ -252,7 +302,8 @@ void multiplier_update(Matrix *d_y_costs_dev, int N, int K, unsigned int devid, 
 
 	calculateRectangularDims(blocks_per_grid, threads_per_block, total_blocks, y_size, DSPC_y[devid]);
 	kernel_multiplier_update_cuda<<<blocks_per_grid, threads_per_block>>>(d_y_costs_dev[devid].elements, N, K, devid, DSPC_y[devid], offset_y, devcount, procid, procsize);
-	cudaDeviceSynchronize(); // was required to make the code enter the kernel
+	cudaDeviceSynchronize();
+
 	cudaError_t error = cudaGetLastError();
 	if (error != cudaSuccess)
 	{
@@ -282,7 +333,7 @@ void solveYLSAP(Matrix *d_y_costs_dev, Matrix *d_x_costs_dev, int N, int K, unsi
 
 	for (int i = 0; i < DSPC_y[devid]; i++)
 	{
-		kernel_solveYLSAP_cuda_dual<<<blocks_per_grid, threads_per_block>>>(d_y_costs_dev[devid].elements, d_x_costs_dev[devid].elements, devid, N, K, DSPC_y[devid], DSPC_x[devid], offset_y, offset_x, i);
+		kernel_solveYLSAP_cuda_dual_old<<<blocks_per_grid, threads_per_block>>>(d_y_costs_dev[devid].elements, d_x_costs_dev[devid].elements, devid, N, K, DSPC_y[devid], DSPC_x[devid], offset_y, offset_x, i);
 		cudaSafeCall_new(cudaGetLastError(), "Error in kernel_initializeYCosts Functions initializeYCosts");
 	}
 

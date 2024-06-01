@@ -5,6 +5,7 @@
 #include <iostream>
 #include <math.h>
 #include <random>
+// #include "logger.cuh"
 #include "f_cutils.cuh"
 
 void gen_costs_mod(double *cost_matrix, double *y_costs, const int *cycle, unsigned long seed, int SP_x, int SP_y, std::size_t N, std::size_t K)
@@ -12,7 +13,7 @@ void gen_costs_mod(double *cost_matrix, double *y_costs, const int *cycle, unsig
   double val = 0;
 
   // std::random_device rd;
-
+  Log(debug, "#SPx: %d, #SPy: %d\n", SP_x, SP_y);
   double value = 0;
   //	int SP = K-2;
   float sigma10 = 0.3;
@@ -112,4 +113,36 @@ void gen_costs_mod(double *cost_matrix, double *y_costs, const int *cycle, unsig
     }
   }
   std::cout << "last costs generated" << std::endl;
+}
+
+double getMMEP(int *row_assignments, size_t N, size_t K)
+{
+  size_t mme = 0;
+  for (size_t k = 0; k < K - 1; k++)
+  {
+    for (size_t i = 0; i < N; i++)
+    {
+      if (row_assignments[k * N + i] != i)
+        mme++;
+    }
+  }
+  double mmep = mme * 0.5 / (N * (K - 1)); // since each mismatch counted twice
+  return mmep * 100;
+}
+
+double getITCP(int *row_assignments, size_t N, size_t K)
+{
+  int itc = 0; // incorrect track count
+  for (size_t k = 0; k < K - 1; k++)
+  {
+    bool is_good = true;
+    for (size_t i = 0; i < N; i++)
+    {
+      if (row_assignments[k * N + i] != i)
+        is_good = false;
+    }
+    itc += (is_good) ? 0 : 1;
+  }
+  double itcp = itc * 0.5 / N; // Since tracks are incorrect in pairs
+  return itcp * 100;
 }
